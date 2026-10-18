@@ -93,9 +93,9 @@ struct VMWindowView: View {
     // MARK: Display (fills the window)
 
     @ViewBuilder private func display(_ controller: VMController) -> some View {
-        if let vnc = controller.vncEndpoint {
-            // QEMU-backed guest (e.g. Windows): render its display over VNC.
-            VNCView(host: vnc.host, port: vnc.port)
+        if let vncSock = controller.vncSocketPath {
+            // QEMU-backed guest (e.g. Windows): render its display over a private VNC socket.
+            VNCView(socketPath: vncSock)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
         } else {

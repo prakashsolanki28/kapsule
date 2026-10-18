@@ -9,8 +9,7 @@ import Network
 /// Kapsule needs: protocol 3.8, no-auth security, raw-encoding framebuffer updates, and
 /// pointer/key events. Not a general VNC client — it targets QEMU on 127.0.0.1 only.
 final class RFBClient: @unchecked Sendable {
-    private let host: String
-    private let port: Int
+    private let socketPath: String
     private let queue = DispatchQueue(label: "io.kapsule.rfb")
     private var conn: NWConnection?
 
@@ -22,14 +21,15 @@ final class RFBClient: @unchecked Sendable {
     /// Called with a new framebuffer image whenever an update arrives.
     var onFramebuffer: ((CGImage, CGSize) -> Void)?
 
-    init(host: String, port: Int) {
-        self.host = host
-        self.port = port
+    init(socketPath: String) {
+        self.socketPath = socketPath
     }
 
     func start() {
         running = true
-        let conn = NWConnection(host: .init(host), port: .init(rawValue: UInt16(port))!, using: .tcp)
+        // Connect to QEMU's private VNC Unix socket (owner-only directory).
+        let endpoint = NWEndpoint.unix(path: socketPath)
+        let conn = NWConnection(to: endpoint, using: .tcp)
         self.conn = conn
         conn.stateUpdateHandler = { [weak self] state in
             if case .ready = state { self?.handshake() }
@@ -58,9 +58,12 @@ final class RFBClient: @unchecked Sendable {
                     self.stop(); return
                 }
                 self.receive(exactly: count) { types in
-                    // Choose None (1) if offered, else the first.
-                    let chosen: UInt8 = types.contains(1) ? 1 : (types.first ?? 1)
-                    self.send(Data([chosen]))
+                    // Only "None" (1) is acceptable: the Unix socket is already gated by
+                    // its 0700 directory, and we don't implement VNC auth. If the server
+                    // doesn't offer None, refuse rather than silently negotiating something
+                    // else.
+                    guard types.contains(1) else { self.stop(); return }
+                    self.send(Data([1]))
                     // SecurityResult (u32). 0 = OK.
                     self.receive(exactly: 4) { result in
                         if self.beU32(result) != 0 { self.stop(); return }

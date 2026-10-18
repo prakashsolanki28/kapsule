@@ -71,20 +71,23 @@ public enum QEMUSupport {
 
     public struct LaunchPlan: Sendable {
         public let arguments: [String]
-        public let vncPort: Int        // host VNC display is 127.0.0.1:(5900+vncDisplay)
-        public let vncDisplay: Int
+        /// Unix-domain-socket path the VNC display is served on (owner-only access).
+        public let vncSocketPath: String
         public let tpmSocketPath: String?
     }
 
-    /// Build the QEMU argument list for a VM. `vncDisplay` chooses the VNC display number
-    /// (port 5900+n). A `tpmSocketPath`, when provided, wires a TPM device.
+    /// Build the QEMU argument list for a VM.
+    ///
+    /// The display is served over a **Unix domain socket** in an owner-only (0700)
+    /// directory, not a TCP port — so no other process or user on the machine can reach
+    /// the VM console. A `tpmSocketPath`, when provided, wires a TPM device.
     public static func buildArguments(
         model: VirtualMachineModel,
         bundleURL: URL,
         diskURL: URL,
         isoURL: URL?,
         varsURL: URL,
-        vncDisplay: Int,
+        vncSocketPath: String,
         tpmSocketPath: String?
     ) -> LaunchPlan {
         var args: [String] = [
@@ -94,7 +97,8 @@ public enum QEMUSupport {
             "-m", String(max(1024, model.memoryMiB)),
             // ramfb gives an early framebuffer the UEFI firmware and Windows setup can use.
             "-device", "ramfb",
-            "-vnc", "127.0.0.1:\(vncDisplay)",
+            // VNC on a private Unix socket — filesystem permissions gate access.
+            "-vnc", "unix:\(vncSocketPath)",
             "-device", "qemu-xhci",
             "-device", "usb-kbd",
             "-device", "usb-tablet",
@@ -127,9 +131,21 @@ public enum QEMUSupport {
         }
 
         return LaunchPlan(arguments: args,
-                          vncPort: 5900 + vncDisplay,
-                          vncDisplay: vncDisplay,
+                          vncSocketPath: vncSocketPath,
                           tpmSocketPath: tpmSocketPath)
+    }
+
+    /// Create a 0700 directory for this VM's private sockets (VNC, TPM) and return it.
+    /// A short path under the temp dir keeps Unix-socket paths within the length limit.
+    public static func privateSocketDir(for model: VirtualMachineModel) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kapsule-\(model.id.uuidString.prefix(8))", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
+        // Tighten in case it already existed with looser perms.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        return dir
     }
 
     // MARK: Helpers

@@ -9,17 +9,16 @@ import SwiftUI
 /// enough for QEMU's raw-encoding framebuffer — so Windows/other QEMU guests render in
 /// Kapsule's own window rather than a separate QEMU window.
 struct VNCView: NSViewRepresentable {
-    let host: String
-    let port: Int
+    let socketPath: String
 
     func makeNSView(context: Context) -> VNCClientView {
         let v = VNCClientView()
-        v.connect(host: host, port: port)
+        v.connect(socketPath: socketPath)
         return v
     }
 
     func updateNSView(_ nsView: VNCClientView, context: Context) {
-        nsView.connect(host: host, port: port)   // no-op if already connected to this endpoint
+        nsView.connect(socketPath: socketPath)   // no-op if already connected to this socket
     }
 
     static func dismantleNSView(_ nsView: VNCClientView, coordinator: ()) {
@@ -38,13 +37,12 @@ final class VNCClientView: NSView {
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
-    func connect(host: String, port: Int) {
-        let endpoint = "\(host):\(port)"
-        guard endpoint != connectedEndpoint else { return }
+    func connect(socketPath: String) {
+        guard socketPath != connectedEndpoint else { return }
         disconnect()
-        connectedEndpoint = endpoint
+        connectedEndpoint = socketPath
 
-        let client = RFBClient(host: host, port: port)
+        let client = RFBClient(socketPath: socketPath)
         self.client = client
         client.onFramebuffer = { [weak self] cg, size in
             DispatchQueue.main.async {

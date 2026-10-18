@@ -18,10 +18,10 @@ public final class QEMUBackend: VMBackend, @unchecked Sendable {
     private var model: VirtualMachineModel?
     private var bundleURL: URL?
 
-    /// The loopback VNC endpoint QEMU is serving, once running. The UI reads this to attach
-    /// its display. Port 0 means "not running".
-    public private(set) var vncHost = "127.0.0.1"
-    public private(set) var vncPort: Int = 0
+    /// The private Unix-socket path QEMU serves its VNC display on, once running. The UI
+    /// reads this to attach its display. Empty means "not running". Access is gated by the
+    /// 0700 directory it lives in — no TCP port, so no other process/user can reach it.
+    public private(set) var vncSocketPath: String = ""
 
     public init() {}
 
@@ -56,16 +56,19 @@ public final class QEMUBackend: VMBackend, @unchecked Sendable {
             .flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
         let vars = try QEMUSupport.ensureVarsStore(in: bundleURL)
 
+        // Private 0700 directory holding this VM's VNC and TPM sockets.
+        let sockDir = try QEMUSupport.privateSocketDir(for: model)
+        let vncSock = sockDir.appendingPathComponent("vnc.sock").path
+
         // Windows 11 needs a TPM. Start swtpm if available and the guest is Windows.
         var tpmSocketPath: String?
         if model.guest == .windowsARM, QEMUSupport.swtpmBinary() != nil {
-            tpmSocketPath = try? startTPM(for: model)
+            tpmSocketPath = try? startTPM(for: model, in: sockDir)
         }
 
-        let vncDisplay = Self.pickVNCDisplay()
         let plan = QEMUSupport.buildArguments(
             model: model, bundleURL: bundleURL, diskURL: disk, isoURL: iso,
-            varsURL: vars, vncDisplay: vncDisplay, tpmSocketPath: tpmSocketPath)
+            varsURL: vars, vncSocketPath: vncSock, tpmSocketPath: tpmSocketPath)
 
         subject.send(.starting)
         let proc = Process()
@@ -92,7 +95,7 @@ public final class QEMUBackend: VMBackend, @unchecked Sendable {
 
         lock.withLock {
             qemuProcess = proc
-            vncPort = plan.vncPort
+            vncSocketPath = plan.vncSocketPath
         }
 
         // Give QEMU a moment to open the VNC port, then report running. If QEMU died
@@ -121,7 +124,7 @@ public final class QEMUBackend: VMBackend, @unchecked Sendable {
         proc?.terminate()
         // Give it a moment to exit; terminationHandler posts the final state.
         try? await Task.sleep(nanoseconds: 300_000_000)
-        lock.withLock { qemuProcess = nil; vncPort = 0 }
+        lock.withLock { qemuProcess = nil; vncSocketPath = "" }
         stopTPM()
     }
 
@@ -134,18 +137,16 @@ public final class QEMUBackend: VMBackend, @unchecked Sendable {
 
     // MARK: swtpm
 
-    private func startTPM(for model: VirtualMachineModel) throws -> String {
-        // A short socket path (Unix sockets cap near 104 chars); use the temp dir.
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("kapsule-tpm-\(model.id.uuidString.prefix(8))")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let sock = dir.appendingPathComponent("sock")
+    private func startTPM(for model: VirtualMachineModel, in dir: URL) throws -> String {
+        let sock = dir.appendingPathComponent("tpm.sock")
+        let state = dir.appendingPathComponent("tpm-state", isDirectory: true)
+        try FileManager.default.createDirectory(at: state, withIntermediateDirectories: true)
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: QEMUSupport.swtpmBinary()!)
         proc.arguments = [
             "socket",
-            "--tpmstate", "dir=\(dir.path)",
+            "--tpmstate", "dir=\(state.path)",
             "--ctrl", "type=unixio,path=\(sock.path)",
             "--tpm2",
         ]
@@ -163,13 +164,5 @@ public final class QEMUBackend: VMBackend, @unchecked Sendable {
         let proc = lock.withLock { tpmProcess }
         proc?.terminate()
         lock.withLock { tpmProcess = nil }
-    }
-
-    // MARK: Helpers
-
-    /// Pick a VNC display number not obviously in use (simple, per-process offset).
-    private static func pickVNCDisplay() -> Int {
-        // Displays 5900+1..=5900+64. Use the low bits of the pid to spread instances.
-        1 + Int(ProcessInfo.processInfo.processIdentifier % 60)
     }
 }

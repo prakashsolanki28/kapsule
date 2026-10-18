@@ -27,10 +27,10 @@ final class VMController: ObservableObject {
     }
     #endif
 
-    /// The loopback VNC endpoint for a QEMU-backed VM, once running (else nil).
-    var vncEndpoint: (host: String, port: Int)? {
-        guard let q = backend as? QEMUBackend, q.vncPort != 0 else { return nil }
-        return (q.vncHost, q.vncPort)
+    /// The private VNC Unix-socket path for a QEMU-backed VM, once running (else nil).
+    var vncSocketPath: String? {
+        guard let q = backend as? QEMUBackend, !q.vncSocketPath.isEmpty else { return nil }
+        return q.vncSocketPath
     }
 
     /// Whether this VM runs under QEMU (vs Apple's framework).
