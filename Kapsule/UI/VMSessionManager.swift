@@ -26,6 +26,20 @@ final class VMSessionManager: ObservableObject {
     /// instead of a window flashing open and shut.
     @Published var startError: String?
 
+    /// The VM whose window is frontmost, so the host-owned Machine menu commands act on
+    /// the right session without the user hovering over guest-drawn pixels.
+    @Published var focusedVM: VirtualMachineModel.ID?
+
+    /// A VM for which the user asked to shut down; the window shows a confirmation. This
+    /// keeps the destructive action behind an explicit host-owned confirm step.
+    @Published var shutDownRequest: VirtualMachineModel.ID?
+
+    /// Ask to shut a VM down (shows a confirmation in its window).
+    func requestShutDown(_ id: VirtualMachineModel.ID) {
+        guard sessions[id] != nil else { return }
+        shutDownRequest = id
+    }
+
     /// The controller for a VM, if a session exists.
     func controller(for id: VirtualMachineModel.ID) -> VMController? { sessions[id] }
 
@@ -47,6 +61,19 @@ final class VMSessionManager: ObservableObject {
     /// lifecycle actions key on this, so nothing is deleted or double-started while a
     /// session is live.
     func hasSession(_ id: VirtualMachineModel.ID) -> Bool { sessions[id] != nil }
+
+    /// The state of a VM's session, for host-owned menu commands.
+    func state(_ id: VirtualMachineModel.ID) -> VMState? { sessions[id]?.state }
+
+    /// Pause/resume the VM, invoked from the host Machine menu (not guest-covered pixels).
+    func pause(_ id: VirtualMachineModel.ID) {
+        guard let c = sessions[id], c.state == .running else { return }
+        Task { try? await c.pause() }
+    }
+    func resume(_ id: VirtualMachineModel.ID) {
+        guard let c = sessions[id], c.state == .paused else { return }
+        Task { try? await c.resume() }
+    }
 
     /// Whether a VM is actively running (its guest is up). Used for the green "running"
     /// indicator; destructive gates use `hasSession` instead.

@@ -12,7 +12,10 @@ struct VZConsoleView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> VZVirtualMachineView {
         let view = VZVirtualMachineView()
-        view.capturesSystemKeys = true
+        // Do NOT capture host system keys: the host must always keep Command-Q,
+        // Command-Tab, Escape and the menu bar, so a full-screen guest can never trap the
+        // user or spoof host chrome. (The guest still gets ordinary keystrokes.)
+        view.capturesSystemKeys = false
         view.virtualMachine = virtualMachine
         return view
     }

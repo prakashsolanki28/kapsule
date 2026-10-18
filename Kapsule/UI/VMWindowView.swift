@@ -19,10 +19,30 @@ struct VMWindowView: View {
         content
             .navigationTitle(sessions.reference(for: vmID)?.model.name ?? "Virtual Machine")
             .onAppear {
+                sessions.focusedVM = vmID
                 if sessions.controller(for: vmID) == nil,
                    let ref = sessions.pendingReference(for: vmID) {
                     sessions.startSession(for: ref)
                 }
+            }
+            // Track which VM window is frontmost so the host Machine menu targets it.
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+                sessions.focusedVM = vmID
+            }
+            // Destructive shut down always goes through an explicit host confirmation.
+            .confirmationDialog(
+                "Shut down “\(name)”?",
+                isPresented: Binding(
+                    get: { sessions.shutDownRequest == vmID },
+                    set: { if !$0 { sessions.shutDownRequest = nil } }),
+                titleVisibility: .visible) {
+                Button("Shut Down", role: .destructive) {
+                    sessions.shutDownRequest = nil
+                    sessions.stopSession(vmID)
+                }
+                Button("Cancel", role: .cancel) { sessions.shutDownRequest = nil }
+            } message: {
+                Text("Unsaved work in the virtual machine may be lost.")
             }
     }
 
@@ -128,12 +148,13 @@ struct VMWindowView: View {
                 toggleFullScreen()
             }
             stripButton("Shut Down", "power", destructive: true) {
-                sessions.stopSession(vmID)
+                sessions.requestShutDown(vmID)   // explicit confirmation, host-owned
             }
         }
         .padding(.horizontal, 16)
         .frame(height: 42)
-        .background(.ultraThinMaterial)
+        // Opaque so guest pixels never composite through this host control.
+        .background(Color(red: 0.11, green: 0.11, blue: 0.12))
         .environment(\.colorScheme, .dark)
     }
 
