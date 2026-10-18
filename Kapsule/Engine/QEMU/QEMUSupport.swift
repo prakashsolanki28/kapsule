@@ -144,12 +144,17 @@ public enum QEMUSupport {
                           tpmSocketPath: tpmSocketPath)
     }
 
-    /// Create (once) a tiny FAT image holding a `startup.nsh` that auto-launches the
-    /// Windows/Linux ARM EFI bootloader from the install CD, so the UEFI shell boots it
-    /// instead of sitting at a prompt. Returns the image path, or nil if it can't be made.
-    public static func ensureAutoBootImage(in bundleURL: URL) -> URL? {
-        let img = bundleURL.appendingPathComponent("autoboot.img")
-        if FileManager.default.fileExists(atPath: img.path) { return img }
+    /// Build a tiny FAT image holding a `startup.nsh` that auto-launches the Windows/Linux
+    /// ARM EFI bootloader from the install CD, so the UEFI shell boots it instead of
+    /// sitting at a prompt. Returns the image path, or nil if it can't be made.
+    ///
+    /// Security: the image is generated **fresh** in a private app-owned directory, never
+    /// read from the VM bundle (which, for imported/external VMs, is untrusted — a
+    /// bundle-supplied `autoboot.img` could be a symlink to an arbitrary host file).
+    public static func ensureAutoBootImage(in privateDir: URL) -> URL? {
+        let img = privateDir.appendingPathComponent("autoboot.img")
+        // Always regenerate: remove any stale/attacker-planted file first.
+        try? FileManager.default.removeItem(at: img)
 
         // Try each filesystem for a bootable EFI. Prefer Windows' no-prompt CD bootloader
         // (boots setup directly, no "Press any key"); fall back to the generic
