@@ -19,6 +19,10 @@ final class VMSessionManager: ObservableObject {
     /// down and releases its resources — not only an app-initiated stop.
     private var stateWatchers: [VirtualMachineModel.ID: AnyCancellable] = [:]
 
+    /// The last start failure, surfaced to the UI so a failed launch explains itself
+    /// instead of a window flashing open and shut.
+    @Published var startError: String?
+
     /// The controller for a VM, if a session exists.
     func controller(for id: VirtualMachineModel.ID) -> VMController? { sessions[id] }
 
@@ -72,6 +76,7 @@ final class VMSessionManager: ObservableObject {
             do {
                 try await controller.start(model: reference.model, bundleURL: reference.bundleURL)
             } catch {
+                self?.startError = Self.describe(error, vm: reference.model.name)
                 self?.endSession(id)
             }
         }
@@ -102,4 +107,25 @@ final class VMSessionManager: ObservableObject {
     }
 
     var hasRunning: Bool { sessions.keys.contains { isRunning($0) } }
+
+    /// A friendly explanation for a failed start.
+    private static func describe(_ error: Error, vm: String) -> String {
+        if let e = error as? VMBackendError {
+            switch e {
+            case .diskImageMissing:
+                return "“\(vm)” can’t start — its disk is missing. The VM’s files may have been moved or deleted."
+            case .installMediaMissing(let path):
+                return "“\(vm)” can’t start — its install disc is missing:\n\(path)"
+            case .invalidConfiguration(let why):
+                return "“\(vm)” has an invalid setting: \(why)"
+            case .unsupported(let what):
+                return "“\(vm)”: \(what)"
+            case .backendFailure(let msg):
+                return "“\(vm)” failed to start: \(msg)"
+            case .notPrepared:
+                return "“\(vm)” wasn’t ready to start. Please try again."
+            }
+        }
+        return "“\(vm)” failed to start: \(error.localizedDescription)"
+    }
 }

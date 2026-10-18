@@ -92,17 +92,28 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
         let diskAttachment = try VZDiskImageStorageDeviceAttachment(url: diskURL, readOnly: false)
         storage.append(VZVirtioBlockDeviceConfiguration(attachment: diskAttachment))
 
+        var installMediaAttached = false
         if let iso = model.installISOPath {
             // The ISO is user-selected media outside the bundle; attach it read-only and
             // resolve symlinks so a link can't redirect to an unexpected host file.
             let isoURL = URL(fileURLWithPath: iso).resolvingSymlinksInPath()
-            guard FileManager.default.fileExists(atPath: isoURL.path) else {
-                throw VMBackendError.installMediaMissing(isoURL.path)
+            // A missing ISO is NOT fatal: once the OS is installed the machine boots from
+            // its disk, so we simply skip absent install media (the guest boots the
+            // installed system).
+            if FileManager.default.fileExists(atPath: isoURL.path) {
+                let isoAttachment = try VZDiskImageStorageDeviceAttachment(url: isoURL, readOnly: true)
+                // Attach the install ISO as a read-only virtio block device. Apple's EFI
+                // boots a virtio-blk CD reliably, whereas USB mass-storage boot is flaky.
+                storage.append(VZVirtioBlockDeviceConfiguration(attachment: isoAttachment))
+                installMediaAttached = true
             }
-            let isoAttachment = try VZDiskImageStorageDeviceAttachment(url: isoURL, readOnly: true)
-            // Attach the install ISO as a read-only virtio block device. Apple's EFI boots
-            // a virtio-blk CD reliably, whereas USB mass-storage boot is flaky.
-            storage.append(VZVirtioBlockDeviceConfiguration(attachment: isoAttachment))
+        }
+
+        // Nothing to boot: a blank disk with no install media would start to an empty
+        // screen. Fail with a clear message instead.
+        if !installMediaAttached, !diskHasData(diskURL) {
+            throw VMBackendError.installMediaMissing(
+                "no operating system is installed and the install disc is missing")
         }
         config.storageDevices = storage
 
@@ -238,6 +249,22 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
         let minM = VZVirtualMachineConfiguration.minimumAllowedMemorySize
         let maxM = VZVirtualMachineConfiguration.maximumAllowedMemorySize
         return min(max(requested, minM), maxM)
+    }
+
+    /// Whether a raw disk image already holds a partition table (an installed OS), by
+    /// checking for a GPT signature at LBA 1 or an MBR boot signature at the end of LBA 0.
+    private static func diskHasData(_ url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        func read(at offset: UInt64, _ count: Int) -> Data? {
+            guard (try? handle.seek(toOffset: offset)) != nil else { return nil }
+            return try? handle.read(upToCount: count)
+        }
+        // GPT header "EFI PART" at offset 512.
+        if read(at: 512, 8) == Data("EFI PART".utf8) { return true }
+        // MBR boot signature 0x55AA at bytes 510–511.
+        if read(at: 510, 2) == Data([0x55, 0xAA]) { return true }
+        return false
     }
 
     /// Reject a relative path that is not a single safe file component.

@@ -25,6 +25,13 @@ struct LibraryView: View {
             } message: {
                 Text(library.lastError ?? "")
             }
+            .alert("Couldn’t start the machine",
+                   isPresented: Binding(get: { sessions.startError != nil },
+                                        set: { if !$0 { sessions.startError = nil } })) {
+                Button("OK", role: .cancel) { sessions.startError = nil }
+            } message: {
+                Text(sessions.startError ?? "")
+            }
     }
 
     @ViewBuilder private var content: some View {
