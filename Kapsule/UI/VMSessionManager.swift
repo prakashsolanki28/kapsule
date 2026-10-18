@@ -70,13 +70,20 @@ final class VMSessionManager: ObservableObject {
             accessStops[id] = VMBookmarks.beginAccess(reference.bundleURL)
         }
 
-        // Reap the session when the machine is actually down. A guest-initiated shutdown
-        // reaches `.stopped` and reaps directly. `.error` may leave the machine partly
-        // up, so we force a real stop before releasing the security-scoped bookmark.
+        // Reap the session only once the machine has actually come up and then gone down.
+        // The controller starts at `.stopped`; we must NOT treat that initial/idle state as
+        // a shutdown, or the session is reaped the instant it's created. So we wait for a
+        // live state first, then reap on the next `.stopped`/`.error`.
+        var hasBeenLive = false
         stateWatchers[id] = controller.$state
-            .dropFirst()
             .sink { [weak self] state in
                 guard let self else { return }
+                if state == .starting || state == .running
+                    || state == .resuming || state == .paused {
+                    hasBeenLive = true
+                    return
+                }
+                guard hasBeenLive else { return }   // ignore the initial idle .stopped
                 switch state {
                 case .stopped:
                     self.endSession(id)
