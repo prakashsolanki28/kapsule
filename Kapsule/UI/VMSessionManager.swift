@@ -24,11 +24,16 @@ final class VMSessionManager: ObservableObject {
 
     func reference(for id: VirtualMachineModel.ID) -> VMReference? { references[id] }
 
-    /// Whether a VM is actively running (derived from the controller's state, not mere
-    /// dictionary presence, so a stopped-but-not-yet-reaped session doesn't read as live).
+    /// Whether a session exists for this VM at all (starting, running, paused, or in an
+    /// error state that still holds the machine/resources). UI gates for destructive and
+    /// lifecycle actions key on this, so nothing is deleted or double-started while a
+    /// session is live.
+    func hasSession(_ id: VirtualMachineModel.ID) -> Bool { sessions[id] != nil }
+
+    /// Whether a VM is actively running (its guest is up). Used for the green "running"
+    /// indicator; destructive gates use `hasSession` instead.
     func isRunning(_ id: VirtualMachineModel.ID) -> Bool {
-        guard let c = sessions[id] else { return false }
-        return c.state != .stopped && c.state != .error
+        sessions[id]?.state == .running || sessions[id]?.state == .paused
     }
 
     /// Start (or focus) a session for `reference`. Returns the controller.
@@ -46,13 +51,20 @@ final class VMSessionManager: ObservableObject {
             accessStops[id] = VMBookmarks.beginAccess(reference.bundleURL)
         }
 
-        // Reap the session when the machine actually stops — including a shutdown
-        // triggered from inside the guest, which no app button would catch.
+        // Reap the session when the machine is actually down. A guest-initiated shutdown
+        // reaches `.stopped` and reaps directly. `.error` may leave the machine partly
+        // up, so we force a real stop before releasing the security-scoped bookmark.
         stateWatchers[id] = controller.$state
             .dropFirst()
             .sink { [weak self] state in
-                if state == .stopped || state == .error {
-                    self?.endSession(id)
+                guard let self else { return }
+                switch state {
+                case .stopped:
+                    self.endSession(id)
+                case .error:
+                    Task { await controller.stopIfRunning(); self.endSession(id) }
+                default:
+                    break
                 }
             }
 
@@ -66,11 +78,16 @@ final class VMSessionManager: ObservableObject {
         return controller
     }
 
-    /// Ask a VM to shut down. The session is torn down by the state watcher once the
-    /// backend confirms the machine has stopped — not eagerly here.
+    /// Shut a VM down. If it can stop normally, the state watcher reaps the session once
+    /// the backend confirms `.stopped`. If the session is wedged (e.g. `.error`), tear it
+    /// down explicitly so resources are never left held.
     func stopSession(_ id: VirtualMachineModel.ID) {
-        guard let controller = sessions[id], controller.state.canStop else { return }
-        Task { try? await controller.stop() }
+        guard let controller = sessions[id] else { return }
+        if controller.state.canStop {
+            Task { try? await controller.stop() }
+        } else {
+            Task { await controller.stopIfRunning(); self.endSession(id) }
+        }
     }
 
     /// Remove a finished session's state and release its resources. Safe to call more than

@@ -6,14 +6,16 @@ import Foundation
 /// Remembers VM bundles that live outside the default library (e.g. on an external
 /// drive), so they appear in the sidebar across launches.
 ///
-/// Locations are stored as **security-scoped bookmarks**, which survive the volume being
-/// unmounted and remounted and keep sandbox access to user-chosen folders. The index is a
-/// small JSON file in the default library directory.
+/// Each entry stores a plain file path **and** a security-scoped bookmark. The path is the
+/// reliable key (it resolves in any process and in the non-sandboxed dev build); the
+/// bookmark restores sandbox access when the app runs sandboxed. The index is a small JSON
+/// file in the default library directory.
 public final class VMBookmarks {
     public static let indexFileName = "bookmarks.json"
 
     private struct Entry: Codable {
-        let bookmark: Data
+        var path: String
+        var bookmark: Data?
     }
 
     private let indexURL: URL
@@ -35,75 +37,81 @@ public final class VMBookmarks {
         try data.write(to: indexURL, options: .atomic)
     }
 
-    /// Add a bundle URL to the index (no-op if already present).
+    /// Add a bundle URL to the index (no-op if its path is already present).
     public func add(_ bundleURL: URL) throws {
+        let path = bundleURL.standardizedFileURL.path
         var entries = load()
-        let resolved = resolveAll(entries).map { $0.standardizedFileURL.path }
-        guard !resolved.contains(bundleURL.standardizedFileURL.path) else { return }
+        guard !entries.contains(where: { $0.path == path }) else { return }
+
+        var bookmark: Data?
         #if canImport(AppKit)
-        let bookmark = try bundleURL.bookmarkData(
+        bookmark = try? bundleURL.bookmarkData(
             options: [.withSecurityScope],
             includingResourceValuesForKeys: nil, relativeTo: nil)
         #else
-        let bookmark = try bundleURL.bookmarkData()
+        bookmark = try? bundleURL.bookmarkData()
         #endif
-        entries.append(Entry(bookmark: bookmark))
+        entries.append(Entry(path: path, bookmark: bookmark))
         try save(entries)
     }
 
-    /// Remove a bundle URL from the index.
+    /// Remove a bundle URL from the index (by path).
     public func remove(_ bundleURL: URL) throws {
         let target = bundleURL.standardizedFileURL.path
-        let kept = load().filter { entry in
-            guard let url = resolve(entry) else { return false }  // drop unresolvable
-            return url.standardizedFileURL.path != target
-        }
-        try save(kept)
+        try save(load().filter { $0.path != target })
     }
 
-    /// Resolve all bookmarked bundle URLs that are currently reachable. Stale bookmarks
-    /// (deleted VMs, permanently unavailable volumes) are pruned.
+    /// Resolve the bookmarked bundle URLs that currently exist on disk. An entry whose
+    /// path is missing is kept (the volume may be unmounted) unless its parent volume is
+    /// mounted and the bundle is simply gone — only then is it pruned.
     public func resolvedBundleURLs() -> [URL] {
-        let entries = load()
-        var kept: [Entry] = []
         var urls: [URL] = []
-        for e in entries {
-            if let url = resolve(e), fm.fileExists(atPath: url.path) {
+        var kept: [Entry] = []
+        for e in load() {
+            let url = URL(fileURLWithPath: e.path)
+            if fm.fileExists(atPath: e.path) {
                 urls.append(url)
                 kept.append(e)
-            } else if resolve(e) != nil {
-                // Resolvable but not currently mounted — keep the bookmark, skip for now.
+            } else if !volumeIsMounted(for: url) {
+                // The drive isn't attached right now — keep the entry for later.
                 kept.append(e)
             }
-            // Fully unresolvable bookmarks are dropped by not re-adding them.
+            // Volume mounted but bundle gone → deleted; drop the entry.
         }
-        if kept.count != entries.count { try? save(kept) }
+        if kept.count != load().count { try? save(kept) }
         return urls
     }
 
     // MARK: - Helpers
 
-    private func resolveAll(_ entries: [Entry]) -> [URL] {
-        entries.compactMap { resolve($0) }
+    /// Whether the volume that would contain `url` is currently mounted.
+    private func volumeIsMounted(for url: URL) -> Bool {
+        // A path under /Volumes/<name> needs that volume mounted; the default library on
+        // the boot volume is always mounted.
+        let comps = url.standardizedFileURL.pathComponents
+        if comps.count >= 3, comps[1] == "Volumes" {
+            return fm.fileExists(atPath: "/Volumes/\(comps[2])")
+        }
+        return true
     }
 
-    private func resolve(_ entry: Entry) -> URL? {
+    /// Resolve an entry's security-scoped bookmark to a fresh URL, when present.
+    public func bookmarkURL(forPath path: String) -> URL? {
+        guard let entry = load().first(where: { $0.path == path }),
+              let data = entry.bookmark else { return nil }
         var stale = false
         #if canImport(AppKit)
-        let url = try? URL(
-            resolvingBookmarkData: entry.bookmark,
-            options: [.withSecurityScope],
-            relativeTo: nil, bookmarkDataIsStale: &stale)
+        return try? URL(resolvingBookmarkData: data, options: [.withSecurityScope],
+                        relativeTo: nil, bookmarkDataIsStale: &stale)
         #else
-        let url = try? URL(
-            resolvingBookmarkData: entry.bookmark,
-            options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
+        return try? URL(resolvingBookmarkData: data, options: [],
+                        relativeTo: nil, bookmarkDataIsStale: &stale)
         #endif
-        return url
     }
 
     /// Begin security-scoped access to a bookmarked URL (call before reading/booting).
-    /// Returns a stop closure; the caller must invoke it when done.
+    /// Returns a stop closure; the caller must invoke it when done. For a plain path with
+    /// no bookmark (or the non-sandboxed build), this is a no-op.
     @discardableResult
     public static func beginAccess(_ url: URL) -> () -> Void {
         let ok = url.startAccessingSecurityScopedResource()

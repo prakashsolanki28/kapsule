@@ -65,17 +65,19 @@ struct LibraryView: View {
             // Double-click a VM to open and run it.
             .onTapGesture(count: 2) { open(ref) }
             .contextMenu {
-                let running = sessions.isRunning(ref.id)
-                Button(running ? "Show Window" : "Open") { open(ref) }
-                if running {
+                let hasSession = sessions.hasSession(ref.id)
+                Button(hasSession ? "Show Window" : "Open") { open(ref) }
+                if hasSession {
+                    // Visible whenever a session exists, including an error state.
                     Button("Shut Down", role: .destructive) { sessions.stopSession(ref.id) }
                 }
                 Divider()
                 if ref.isExternal {
                     Button("Remove from Library") { library.forget(ref) }
+                        .disabled(hasSession)
                 }
                 Button("Delete…", role: .destructive) { library.delete(ref) }
-                    .disabled(running)
+                    .disabled(hasSession)
             }
         }
         .navigationTitle("Kapsule")
@@ -87,9 +89,9 @@ struct LibraryView: View {
         }
     }
 
-    /// Open a VM: start it if stopped, then bring its window forward.
+    /// Open a VM: start it if no session exists, then bring its window forward.
     private func open(_ ref: VMReference) {
-        if sessions.controller(for: ref.id) == nil {
+        if !sessions.hasSession(ref.id) {
             sessions.startSession(for: ref)
         }
         openWindow(value: ref.id)

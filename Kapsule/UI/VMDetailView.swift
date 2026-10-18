@@ -12,6 +12,9 @@ struct VMDetailView: View {
 
     private var model: VirtualMachineModel { reference.model }
     private var isRunning: Bool { sessions.isRunning(reference.id) }
+    /// A session exists (starting/running/paused/error). Gates Start vs. Show Window so a
+    /// second machine can't be started on the same disk.
+    private var hasSession: Bool { sessions.hasSession(reference.id) }
 
     var body: some View {
         VStack(spacing: 24) {
@@ -51,7 +54,7 @@ struct VMDetailView: View {
     }
 
     @ViewBuilder private var actions: some View {
-        if isRunning {
+        if hasSession {
             Button {
                 openWindow(value: reference.id)       // bring the VM window forward
             } label: {
