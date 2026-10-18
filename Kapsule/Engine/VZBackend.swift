@@ -19,7 +19,11 @@ import Foundation
 /// main thread for the UI.
 public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
 
-    private let queue = DispatchQueue(label: "io.kapsule.vz-backend")
+    /// The VM runs on the main queue. `VZVirtualMachineView` requires its machine to have
+    /// been created on the main queue, so backend and view must share it — the supported
+    /// pattern for a GUI virtualization app. (A background queue renders no display and
+    /// tears the window down.)
+    private let queue = DispatchQueue.main
     private let subject = CurrentValueSubject<VMState, Never>(.stopped)
 
     private var machine: VZVirtualMachine?
