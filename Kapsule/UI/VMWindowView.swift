@@ -93,17 +93,24 @@ struct VMWindowView: View {
     // MARK: Display (fills the window)
 
     @ViewBuilder private func display(_ controller: VMController) -> some View {
-        #if canImport(Virtualization)
-        if let vm = controller.liveMachine {
-            VZConsoleView(virtualMachine: vm)
+        if let vnc = controller.vncEndpoint {
+            // QEMU-backed guest (e.g. Windows): render its display over VNC.
+            VNCView(host: vnc.host, port: vnc.port)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
         } else {
+            #if canImport(Virtualization)
+            if let vm = controller.liveMachine {
+                VZConsoleView(virtualMachine: vm)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
+            } else {
+                booting(controller)
+            }
+            #else
             booting(controller)
+            #endif
         }
-        #else
-        booting(controller)
-        #endif
     }
 
     private func booting(_ controller: VMController) -> some View {
