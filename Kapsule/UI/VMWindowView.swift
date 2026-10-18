@@ -3,39 +3,41 @@
 
 import SwiftUI
 
-/// A VM running in its own window, separate from the main Kapsule window. The guest
-/// display fills the whole window edge to edge and can go full screen — nothing but the
-/// operating system. VM controls live in the window's toolbar / menu, not an on-screen bar.
+/// A VM running in its own window. The guest display fills the whole window edge to edge —
+/// nothing but the operating system. There is no title or toolbar; moving the pointer to
+/// the top edge reveals a slim auto-hiding control strip (status, Pause, Shut Down).
 struct VMWindowView: View {
     let vmID: VirtualMachineModel.ID
     @EnvironmentObject private var sessions: VMSessionManager
     @Environment(\.dismiss) private var dismiss
 
-    /// Once a session has been seen for this window, losing it means the VM stopped and the
-    /// window should close. Before that, a nil session is just "not started yet" — so the
-    /// window never dismisses itself during the brief gap before the session registers.
     @State private var hadSession = false
+    /// Whether the top control strip is revealed (pointer is near the top edge).
+    @State private var showControls = false
 
     var body: some View {
-        Group {
-            if let controller = sessions.controller(for: vmID) {
+        content
+            .navigationTitle(sessions.reference(for: vmID)?.model.name ?? "Virtual Machine")
+            .onAppear {
+                if sessions.controller(for: vmID) == nil,
+                   let ref = sessions.pendingReference(for: vmID) {
+                    sessions.startSession(for: ref)
+                }
+            }
+    }
+
+    @ViewBuilder private var content: some View {
+        if let controller = sessions.controller(for: vmID) {
+            ZStack(alignment: .top) {
                 display(controller)
                     .onAppear { hadSession = true }
-                    .toolbar { controlToolbar(controller) }
-            } else if hadSession {
-                // A session existed and is now gone — the VM stopped. Close the window.
-                Color.black.onAppear { dismiss() }
-            } else {
-                idle
+                topControlStrip(controller)
             }
-        }
-        .navigationTitle(sessions.reference(for: vmID)?.model.name ?? "Virtual Machine")
-        // The window owns its own start, so there's no race with whoever opened it.
-        .onAppear {
-            if sessions.controller(for: vmID) == nil,
-               let ref = sessions.pendingReference(for: vmID) {
-                sessions.startSession(for: ref)
-            }
+            .ignoresSafeArea()
+        } else if hadSession {
+            Color.black.onAppear { dismiss() }
+        } else {
+            idle
         }
     }
 
@@ -47,7 +49,6 @@ struct VMWindowView: View {
             VZConsoleView(virtualMachine: vm)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
-                .ignoresSafeArea()
         } else {
             booting(controller)
         }
@@ -85,25 +86,74 @@ struct VMWindowView: View {
         .background(Color.black)
     }
 
-    // MARK: Controls (in the toolbar, not over the OS)
+    // MARK: Auto-hiding top control strip
 
-    @ToolbarContentBuilder
-    private func controlToolbar(_ controller: VMController) -> some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            if controller.state == .running {
-                Button { Task { try? await controller.pause() } } label: {
-                    Label("Pause", systemImage: "pause.fill")
+    @ViewBuilder private func topControlStrip(_ controller: VMController) -> some View {
+        VStack(spacing: 0) {
+            // A thin hover zone along the very top edge that reveals the strip.
+            Color.clear
+                .frame(height: 6)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    withAnimation(.easeOut(duration: 0.18)) { showControls = hovering }
                 }
+
+            if showControls {
+                strip(controller)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .onHover { hovering in
+                        // Keep it open while the pointer is over the strip itself.
+                        withAnimation(.easeOut(duration: 0.18)) { showControls = hovering }
+                    }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func strip(_ controller: VMController) -> some View {
+        HStack(spacing: 14) {
+            Circle()
+                .fill(controller.state == .running ? Color.green : Color.orange)
+                .frame(width: 7, height: 7)
+            Text(name).font(.callout.weight(.medium)).foregroundStyle(.white)
+            Spacer()
+
+            if controller.state == .running {
+                stripButton("Pause", "pause.fill") { Task { try? await controller.pause() } }
             }
             if controller.state == .paused {
-                Button { Task { try? await controller.resume() } } label: {
-                    Label("Resume", systemImage: "play.fill")
-                }
+                stripButton("Resume", "play.fill") { Task { try? await controller.resume() } }
             }
-            Button(role: .destructive) { sessions.stopSession(vmID) } label: {
-                Label("Shut Down", systemImage: "power")
+            stripButton("Full Screen", "arrow.up.left.and.arrow.down.right") {
+                toggleFullScreen()
+            }
+            stripButton("Shut Down", "power", destructive: true) {
+                sessions.stopSession(vmID)
             }
         }
+        .padding(.horizontal, 16)
+        .frame(height: 42)
+        .background(.ultraThinMaterial)
+        .environment(\.colorScheme, .dark)
+    }
+
+    private func stripButton(_ title: String, _ symbol: String,
+                             destructive: Bool = false,
+                             _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .labelStyle(.iconOnly)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(destructive ? Color.red.opacity(0.9) : .white)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(title)
+    }
+
+    private func toggleFullScreen() {
+        NSApp.keyWindow?.toggleFullScreen(nil)
     }
 
     private var name: String {

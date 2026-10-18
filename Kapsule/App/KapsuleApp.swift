@@ -25,17 +25,19 @@ struct KapsuleApp: App {
             }
         }
 
-        // Each running VM gets its own window, keyed by VM id. Installation and running
-        // happen here — a separate screen from the Kapsule app, and full-screen capable.
+        // Each running VM gets its own window, keyed by VM id. The window is pure OS:
+        // the guest display fills it, the title bar is hidden, and controls appear only
+        // when the pointer reaches the top edge.
         WindowGroup(for: VirtualMachineModel.ID.self) { $vmID in
             if let vmID {
                 VMWindowView(vmID: vmID)
                     .environmentObject(sessions)
                     .environmentObject(library)
                     .frame(minWidth: 640, minHeight: 480)
+                    .background(WindowChrome())
             }
         }
-        .windowStyle(.titleBar)
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 800)
     }
 }
