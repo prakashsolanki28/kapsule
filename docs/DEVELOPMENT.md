@@ -22,7 +22,7 @@ swift --version        # Swift 6.x
 ## Getting the code
 
 ```bash
-git clone https://github.com/<your-org>/kapsule.git
+git clone https://github.com/prakashsolanki28/kapsule.git
 cd kapsule
 ```
 

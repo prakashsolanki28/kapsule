@@ -33,4 +33,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   validated as a single safe file component, resolved paths are asserted to stay inside
   their root/bundle, and install ISOs are resolved through symlinks before attaching.
 
-[Unreleased]: https://github.com/<your-org>/kapsule/commits/main
+[Unreleased]: https://github.com/prakashsolanki28/kapsule/commits/main

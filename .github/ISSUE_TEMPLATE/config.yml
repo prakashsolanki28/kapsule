@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions & Discussions
-    url: https://github.com/<your-org>/kapsule/discussions
+    url: https://github.com/prakashsolanki28/kapsule/discussions
     about: Ask questions, share VM setups, and discuss ideas here.
   - name: Security vulnerability
-    url: https://github.com/<your-org>/kapsule/security/advisories/new
+    url: https://github.com/prakashsolanki28/kapsule/security/advisories/new
     about: Report security issues privately. Do not open a public issue.

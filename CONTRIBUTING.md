@@ -8,7 +8,7 @@ By participating you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## Ways to contribute
 
-- **Code** — pick up a [good first issue](https://github.com/<your-org>/kapsule/labels/good%20first%20issue) or propose a change in an issue first.
+- **Code** — pick up a [good first issue](https://github.com/prakashsolanki28/kapsule/labels/good%20first%20issue) or propose a change in an issue first.
 - **Testing** — build from source, run VMs, and file detailed bug reports.
 - **Docs** — improve the README, architecture notes, or guides.
 - **Design** — UI/UX for the VM library, settings, and onboarding.
@@ -66,4 +66,4 @@ jeopardize the whole project. Kapsule is a clean-room, from-scratch implementati
 
 ## Questions
 
-Open a [Discussion](https://github.com/<your-org>/kapsule/discussions) or ask in an issue.
+Open a [Discussion](https://github.com/prakashsolanki28/kapsule/discussions) or ask in an issue.

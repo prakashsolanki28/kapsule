@@ -57,7 +57,7 @@ Linux support, and a feature set that grows toward what people expect from comme
 ## Building from source
 
 ```bash
-git clone https://github.com/<your-org>/kapsule.git
+git clone https://github.com/prakashsolanki28/kapsule.git
 cd kapsule
 open Kapsule.xcodeproj   # then Build & Run in Xcode
 ```
@@ -78,7 +78,7 @@ Full detail: **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 ## Contributing
 
 Kapsule is built in the open and contributions are welcome — code, docs, testing, design.
-Start with **[CONTRIBUTING.md](CONTRIBUTING.md)** and the [good first issues](https://github.com/<your-org>/kapsule/labels/good%20first%20issue).
+Start with **[CONTRIBUTING.md](CONTRIBUTING.md)** and the [good first issues](https://github.com/prakashsolanki28/kapsule/labels/good%20first%20issue).
 
 ## License
 
