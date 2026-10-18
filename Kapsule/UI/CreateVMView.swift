@@ -3,8 +3,9 @@
 
 import SwiftUI
 
-/// The "Create New" screen: install from an image, grab Windows from Microsoft, or pick a
-/// free system to download. Modeled on a professional first-run assistant.
+/// The "Create New" screen: a small store of open-source operating systems. Each OS wears
+/// its own brand color so the catalog reads like a shelf of real distributions. Pick one
+/// to download, or install from your own ISO.
 struct CreateVMView: View {
     @StateObject private var vm: CreateVMViewModel
     @Environment(\.dismiss) private var dismiss
@@ -16,113 +17,130 @@ struct CreateVMView: View {
     var body: some View {
         Group {
             switch vm.step {
-            case .chooseSource:          sourcePicker
+            case .chooseSource:          catalog
             case .downloading(let e):    DownloadProgressView(downloader: vm.downloader, entry: e) { vm.downloader.cancel() }
             case .configure(let e, _):   ConfigureVMView(vm: vm, entry: e)
             }
         }
-        .frame(width: 720, height: 560)
+        .frame(width: 760, height: 580)
         .alert("Couldn’t continue",
                isPresented: Binding(get: { vm.error != nil }, set: { if !$0 { vm.error = nil } })) {
             Button("OK", role: .cancel) { vm.error = nil }
         } message: { Text(vm.error ?? "") }
     }
 
-    private var sourcePicker: some View {
+    // MARK: Catalog
+
+    private let columns = [GridItem(.adaptive(minimum: 340, maximum: 420), spacing: 16)]
+
+    private var catalog: some View {
         VStack(spacing: 0) {
-            Text("Create New").font(.system(size: 34, weight: .semibold)).padding(.top, 28)
-            Divider().padding(.horizontal, 60).padding(.top, 12)
-
-            HStack(spacing: 60) {
-                windowsTile
-                imageFileTile
-            }
-            .frame(maxHeight: .infinity)
-
-            freeSystems
-        }
-    }
-
-    private var windowsTile: some View {
-        BigTile(symbol: "window.casement", tint: .blue,
-                title: "Get Windows 11\nfrom Microsoft") {
-            if let win = vm.catalog.first(where: { $0.guest == .windowsARM }) {
-                vm.select(win)
-            }
-        }
-    }
-
-    private var imageFileTile: some View {
-        BigTile(symbol: "opticaldiscdrive", tint: .secondary,
-                title: "Install from\nan ISO file") {
-            vm.chooseImageFile()
-        }
-    }
-
-    private var freeSystems: some View {
-        VStack(spacing: 10) {
-            Text("Free Systems").font(.title3.weight(.semibold))
-            HStack(spacing: 28) {
-                ForEach(vm.catalog.filter { $0.guest != .windowsARM }) { entry in
-                    FreeSystemButton(entry: entry) { vm.select(entry) }
+            header
+            Divider()
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 16) {
+                    ForEach(vm.catalog) { entry in
+                        OSCard(entry: entry) { vm.select(entry) }
+                    }
                 }
+                .padding(20)
             }
-            HStack {
-                Button("Choose ISO…") { vm.chooseImageFile() }
-                Spacer()
-                Button("Cancel") { dismiss() }
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 8)
+            footer
         }
-        .padding(.vertical, 22)
-        .frame(maxWidth: .infinity)
-        .background(.quaternary.opacity(0.4))
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("New Virtual Machine").font(.system(size: 26, weight: .semibold))
+                Text("Choose an operating system to install.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button {
+                vm.chooseImageFile()
+            } label: {
+                Label("Install from ISO…", systemImage: "opticaldiscdrive")
+            }
+            .controlSize(.large)
+            .help("Install from an ISO file you already have")
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    private var footer: some View {
+        HStack {
+            Text("Images are downloaded from each project and verified when a checksum is published.")
+                .font(.caption).foregroundStyle(.secondary)
+            Spacer()
+            Button("Cancel") { dismiss() }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.quaternary.opacity(0.3))
     }
 }
 
-private struct BigTile: View {
-    let symbol: String
-    let tint: Color
-    let title: String
+/// A single operating-system card: brand badge, name, what it is, and an action.
+private struct OSCard: View {
+    let entry: OSCatalogEntry
     let action: () -> Void
     @State private var hover = false
 
+    private var accent: Color { Color(hex: entry.accentHex) }
+
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 16) {
-                Image(systemName: symbol)
-                    .font(.system(size: 80))
-                    .foregroundStyle(tint)
-                Text(title)
-                    .multilineTextAlignment(.center)
-                    .font(.title3)
-                    .foregroundStyle(.primary)
+            HStack(spacing: 14) {
+                badge
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.name).font(.headline)
+                    Text(entry.tagline)
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(entry.subtitle)
+                        .font(.caption).foregroundStyle(.tertiary)
+                }
+                Spacer(minLength: 8)
+                actionLabel
             }
-            .frame(width: 220, height: 240)
-            .background(hover ? Color.primary.opacity(0.06) : .clear, in: .rect(cornerRadius: 12))
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .shadow(color: .black.opacity(hover ? 0.18 : 0), radius: 8, y: 3))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(hover ? accent.opacity(0.6) : Color.primary.opacity(0.08),
+                                  lineWidth: 1))
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.12), value: hover)
     }
-}
 
-private struct FreeSystemButton: View {
-    let entry: OSCatalogEntry
-    let action: () -> Void
+    /// A rounded square washed in the distro's accent, with its glyph.
+    private var badge: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(
+                LinearGradient(colors: [accent, accent.opacity(0.78)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing))
+            .frame(width: 54, height: 54)
+            .overlay(
+                Image(systemName: entry.symbolName)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(.white))
+    }
 
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: entry.symbolName).font(.system(size: 34))
-                Text(entry.kind == .download ? "Download\n\(entry.name)" : entry.name)
-                    .multilineTextAlignment(.center)
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .frame(width: 120)
-            }
-        }
-        .buttonStyle(.plain)
-        .help(entry.subtitle)
+    /// "Download" for images Kapsule fetches; "Get" (opens the project) otherwise.
+    @ViewBuilder private var actionLabel: some View {
+        let title = entry.isDownloadable ? "Download" : "Get"
+        Text(title)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(hover ? Color.white : accent)
+            .padding(.horizontal, 14).padding(.vertical, 6)
+            .background(
+                Capsule().fill(hover ? accent : accent.opacity(0.14)))
     }
 }

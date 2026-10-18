@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Redesigned "Create New" as an OS catalog.** Removed the Windows tile and the two-big-
+  tiles layout in favor of an app-store-style grid of open-source operating-system cards.
+  Each card wears its distribution's own brand accent (Ubuntu, Fedora, Debian, Alpine,
+  openSUSE, Rocky, Arch) with a plain-language tagline and a Download/Get action. "Install
+  from ISO…" moved to a header button. Expanded the catalog from 3 to 8 systems. Adds
+  `OSCatalogEntry.accentHex`/`tagline` and a `Color(hex:)` helper.
 - **Simplified to ISO-only installs.** Removed the VM import/conversion subsystem
   (`VMImporter`, `DiskConverter`) and the dependency on `qemu-img`: Kapsule no longer opens
   or converts `.pvm`/`.utm` bundles or foreign disk images. The create flow keeps the
