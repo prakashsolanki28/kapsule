@@ -50,7 +50,7 @@ struct LibraryView: View {
         List(library.references, selection: $selection) { ref in
             HStack {
                 Label(ref.model.name, systemImage: icon(for: ref.model.guest))
-                if sessions.controller(for: ref.id) != nil {
+                if sessions.isRunning(ref.id) {
                     Spacer()
                     Circle().fill(Color.green).frame(width: 7, height: 7)
                         .help("Running")
@@ -65,7 +65,7 @@ struct LibraryView: View {
             // Double-click a VM to open and run it.
             .onTapGesture(count: 2) { open(ref) }
             .contextMenu {
-                let running = sessions.controller(for: ref.id) != nil
+                let running = sessions.isRunning(ref.id)
                 Button(running ? "Show Window" : "Open") { open(ref) }
                 if running {
                     Button("Shut Down", role: .destructive) { sessions.stopSession(ref.id) }

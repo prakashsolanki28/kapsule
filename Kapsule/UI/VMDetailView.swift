@@ -11,7 +11,7 @@ struct VMDetailView: View {
     @Environment(\.openWindow) private var openWindow
 
     private var model: VirtualMachineModel { reference.model }
-    private var isRunning: Bool { sessions.controller(for: reference.id) != nil }
+    private var isRunning: Bool { sessions.isRunning(reference.id) }
 
     var body: some View {
         VStack(spacing: 24) {
