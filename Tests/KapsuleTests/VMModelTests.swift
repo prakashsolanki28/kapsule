@@ -2,7 +2,11 @@
 // Kapsule — Copyright 2026 The Kapsule Authors. Apache-2.0.
 
 import XCTest
-@testable import KapsuleCore
+#if canImport(KapsuleCore)
+@testable import KapsuleCore   // SwiftPM build
+#else
+@testable import Kapsule       // Xcode app-target build
+#endif
 
 final class VMModelTests: XCTestCase {
 

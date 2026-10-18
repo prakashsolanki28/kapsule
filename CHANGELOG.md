@@ -20,5 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   engine seam, `MockBackend`, and `VZBackend` that boots a Linux/EFI guest with
   `Virtualization.framework`), the SwiftUI app shell (library, new-VM sheet, console view),
   app entitlements, and a passing test suite. CI builds and tests the core on every PR.
+- **Buildable app:** XcodeGen spec (`project.yml`), app `Info.plist`, and a dev-only
+  entitlements file. `Kapsule.app` builds, signs, and launches on Apple Silicon.
+
+### Security
+
+- Hardened `VMStore` and `VZBackend` against path traversal: VM bundle directories are
+  derived from the stable VM `id` (not the display name), `diskImageRelativePath` is
+  validated as a single safe file component, resolved paths are asserted to stay inside
+  their root/bundle, and install ISOs are resolved through symlinks before attaching.
 
 [Unreleased]: https://github.com/<your-org>/kapsule/commits/main

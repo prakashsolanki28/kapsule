@@ -28,8 +28,22 @@ public final class VMStore {
     }
 
     /// Bundle directory URL for a model (does not create it).
+    ///
+    /// The on-disk directory name is derived from the VM's stable `id`, never its
+    /// user-facing `name`, so a malicious or malformed name cannot escape `root` via
+    /// path separators or `..`. The name is a display value only.
     public func bundleURL(for model: VirtualMachineModel) -> URL {
-        root.appendingPathComponent("\(model.name).\(Self.bundleExtension)", isDirectory: true)
+        root.appendingPathComponent("\(model.id.uuidString).\(Self.bundleExtension)", isDirectory: true)
+    }
+
+    /// Assert that `url` resolves to a location inside `root`; throws otherwise.
+    /// Defense in depth against path traversal before any create/write/remove.
+    private func assertInsideRoot(_ url: URL) throws {
+        let base = root.standardizedFileURL.path
+        let target = url.standardizedFileURL.path
+        guard target == base || target.hasPrefix(base + "/") else {
+            throw VMStoreError.pathEscapesRoot(target)
+        }
     }
 
     /// List all VM models found under `root`.
@@ -49,20 +63,24 @@ public final class VMStore {
     /// Create a new VM bundle: its directory, config, and a sparse disk image.
     @discardableResult
     public func create(_ model: VirtualMachineModel) throws -> URL {
+        try Self.validateRelativeFileName(model.diskImageRelativePath, field: "diskImageRelativePath")
         let bundle = bundleURL(for: model)
+        try assertInsideRoot(bundle)
         guard !fm.fileExists(atPath: bundle.path) else {
             throw VMStoreError.alreadyExists(model.name)
         }
         try fm.createDirectory(at: bundle, withIntermediateDirectories: true)
         try save(model)
-        try createSparseDisk(
-            at: bundle.appendingPathComponent(model.diskImageRelativePath),
-            size: model.diskSizeBytes)
+        let disk = bundle.appendingPathComponent(model.diskImageRelativePath)
+        try assertInsideRoot(disk)
+        try createSparseDisk(at: disk, size: model.diskSizeBytes)
         return bundle
     }
 
     public func save(_ model: VirtualMachineModel) throws {
+        try Self.validateRelativeFileName(model.diskImageRelativePath, field: "diskImageRelativePath")
         let bundle = bundleURL(for: model)
+        try assertInsideRoot(bundle)
         try fm.createDirectory(at: bundle, withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -71,7 +89,23 @@ public final class VMStore {
     }
 
     public func delete(_ model: VirtualMachineModel) throws {
-        try fm.removeItem(at: bundleURL(for: model))
+        let bundle = bundleURL(for: model)
+        try assertInsideRoot(bundle)
+        try fm.removeItem(at: bundle)
+    }
+
+    /// Reject a relative path that is absolute, empty, or contains path separators or
+    /// `..` — it must name a single file directly inside the bundle.
+    static func validateRelativeFileName(_ value: String, field: String) throws {
+        guard !value.isEmpty,
+              !value.hasPrefix("/"),
+              !value.contains("/"),
+              !value.contains("\\"),
+              value != "..",
+              value != "."
+        else {
+            throw VMStoreError.invalidRelativePath(field, value)
+        }
     }
 
     /// Create a sparse file of `size` bytes (allocates no blocks until written).
@@ -89,4 +123,6 @@ public final class VMStore {
 public enum VMStoreError: Error, Equatable {
     case alreadyExists(String)
     case diskCreationFailed(String)
+    case pathEscapesRoot(String)
+    case invalidRelativePath(String, String)
 }

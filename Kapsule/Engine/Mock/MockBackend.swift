@@ -8,9 +8,14 @@ import Foundation
 ///
 /// Used by unit tests, SwiftUI previews, and CI (which has no display/VM). It enforces
 /// the same state-machine rules as a real backend so UI/state logic can be tested.
-public final class MockBackend: VMBackend {
+public final class MockBackend: VMBackend, @unchecked Sendable {
     private let subject = CurrentValueSubject<VMState, Never>(.stopped)
-    private var prepared = false
+    private let lock = NSLock()
+    private var _prepared = false
+    private var prepared: Bool {
+        get { lock.withLock { _prepared } }
+        set { lock.withLock { _prepared = newValue } }
+    }
 
     public init() {}
 

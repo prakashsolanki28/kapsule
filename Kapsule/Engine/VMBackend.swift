@@ -9,7 +9,11 @@ import Foundation
 /// The UI and ViewModels depend only on this protocol — never on `Virtualization`
 /// directly. `VZBackend` is the real implementation; `MockBackend` drives tests and
 /// previews with no hypervisor.
-public protocol VMBackend: AnyObject {
+///
+/// Conformers are `Sendable`: each manages its own internal synchronization
+/// (`MockBackend` via a Combine subject, `VZBackend` via a dedicated serial queue), so
+/// instances may be handed across the main actor and background work safely.
+public protocol VMBackend: AnyObject, Sendable {
     /// Publishes lifecycle state changes.
     var statePublisher: AnyPublisher<VMState, Never> { get }
 

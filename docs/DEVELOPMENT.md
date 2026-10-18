@@ -41,9 +41,37 @@ SwiftUI app.
 
 ### The app
 
-Open the package in Xcode (`open Package.swift`) or the Xcode project once it lands, then
-Build & Run (⌘R). The SwiftUI layer (`Kapsule/App`, `Kapsule/UI`) and the
-`com.apple.security.virtualization` entitlement are wired in the app target.
+The Xcode project is generated from `project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+(so the project file itself is git-ignored and the spec is the source of truth):
+
+```bash
+brew install xcodegen      # once
+xcodegen generate          # writes Kapsule.xcodeproj from project.yml
+open Kapsule.xcodeproj      # Build & Run (⌘R)
+```
+
+In Xcode, under **Signing & Capabilities**, pick your team; automatic signing then
+provisions the `com.apple.security.virtualization` entitlement for you.
+
+#### Headless local build (no Xcode UI)
+
+For a quick signed build from the terminal — useful in scripts — use the **dev
+entitlements** (`Kapsule-dev.entitlements`, virtualization only, no App Sandbox) and
+ad-hoc signing:
+
+```bash
+xcodebuild -project Kapsule.xcodeproj -scheme Kapsule \
+  -configuration Debug -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath build/dd \
+  CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
+  CODE_SIGN_ENTITLEMENTS="Kapsule/Resources/Kapsule-dev.entitlements" \
+  PROVISIONING_PROFILE_SPECIFIER="" build
+
+open build/dd/Build/Products/Debug/Kapsule.app
+```
+
+The App Sandbox is enabled only for distribution builds (`Kapsule.entitlements`), which
+require a provisioning profile — see [BUILD_AND_DISTRIBUTION.md](BUILD_AND_DISTRIBUTION.md).
 
 ## The virtualization entitlement
 

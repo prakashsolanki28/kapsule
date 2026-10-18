@@ -2,7 +2,11 @@
 // Kapsule — Copyright 2026 The Kapsule Authors. Apache-2.0.
 
 import XCTest
-@testable import KapsuleCore
+#if canImport(KapsuleCore)
+@testable import KapsuleCore   // SwiftPM build
+#else
+@testable import Kapsule       // Xcode app-target build
+#endif
 
 final class VMStoreTests: XCTestCase {
 
@@ -31,6 +35,36 @@ final class VMStoreTests: XCTestCase {
 
         try store.delete(model)
         XCTAssertEqual(try store.listModels().count, 0)
+    }
+
+    func testBundleDirUsesStableIDNotName() throws {
+        let (store, dir) = try tempStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // A hostile display name must not influence the on-disk path.
+        let model = VirtualMachineModel(name: "../../etc/evil", diskSizeGiB: 8)
+        let bundle = store.bundleURL(for: model)
+        XCTAssertTrue(bundle.lastPathComponent.hasPrefix(model.id.uuidString))
+        XCTAssertEqual(bundle.deletingLastPathComponent().standardizedFileURL.path,
+                       dir.standardizedFileURL.path)
+    }
+
+    func testRejectsTraversalDiskPath() throws {
+        let (store, dir) = try tempStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let model = VirtualMachineModel(
+            name: "Bad", diskImageRelativePath: "../../../etc/passwd", diskSizeGiB: 8)
+        XCTAssertThrowsError(try store.create(model)) {
+            XCTAssertEqual($0 as? VMStoreError,
+                           .invalidRelativePath("diskImageRelativePath", "../../../etc/passwd"))
+        }
+    }
+
+    func testValidateRelativeFileName() {
+        XCTAssertNoThrow(try VMStore.validateRelativeFileName("disk.img", field: "f"))
+        for bad in ["", "/abs", "a/b", "..", ".", "a\\b"] {
+            XCTAssertThrowsError(try VMStore.validateRelativeFileName(bad, field: "f"),
+                                 "expected '\(bad)' to be rejected")
+        }
     }
 
     func testDuplicateCreateFails() throws {

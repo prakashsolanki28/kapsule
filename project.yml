@@ -1,0 +1,65 @@
+# XcodeGen spec for Kapsule.
+# Regenerate the Xcode project with:  xcodegen generate
+# See docs/DEVELOPMENT.md. The generated Kapsule.xcodeproj is git-ignored; the spec is
+# the committed source of truth.
+
+name: Kapsule
+options:
+  bundleIdPrefix: io.kapsule
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: "C36ZFKJZ22"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+  configs:
+    Release:
+      SWIFT_COMPILATION_MODE: wholemodule
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+      DEAD_CODE_STRIPPING: YES
+
+targets:
+  Kapsule:
+    type: application
+    platform: macOS
+    sources:
+      - path: Kapsule
+        excludes:
+          - "Resources/Info.plist"
+          - "Resources/Kapsule.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.kapsule.app
+        INFOPLIST_FILE: Kapsule/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Kapsule/Resources/Kapsule.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
+
+  KapsuleTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/KapsuleTests
+    dependencies:
+      - target: Kapsule
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.kapsule.tests
+
+schemes:
+  Kapsule:
+    build:
+      targets:
+        Kapsule: all
+        KapsuleTests: [test]
+    test:
+      targets:
+        - KapsuleTests
+    run:
+      config: Debug

@@ -74,8 +74,15 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
         }
 
         // Storage: primary disk + optional install ISO.
+        //
+        // The disk path from config is untrusted input, so it must name a single file
+        // directly inside the bundle — never escape it via separators or `..`. This
+        // mirrors VMStore.validateRelativeFileName and prevents exposing an arbitrary
+        // host file to the guest read-write.
         var storage: [VZStorageDeviceConfiguration] = []
+        try Self.validateSingleComponent(model.diskImageRelativePath, field: "diskImageRelativePath")
         let diskURL = bundleURL.appendingPathComponent(model.diskImageRelativePath)
+        try Self.assertInside(diskURL, bundleURL)
         guard FileManager.default.fileExists(atPath: diskURL.path) else {
             throw VMBackendError.diskImageMissing(diskURL.path)
         }
@@ -83,7 +90,9 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
         storage.append(VZVirtioBlockDeviceConfiguration(attachment: diskAttachment))
 
         if let iso = model.installISOPath {
-            let isoURL = URL(fileURLWithPath: iso)
+            // The ISO is user-selected media outside the bundle; attach it read-only and
+            // resolve symlinks so a link can't redirect to an unexpected host file.
+            let isoURL = URL(fileURLWithPath: iso).resolvingSymlinksInPath()
             guard FileManager.default.fileExists(atPath: isoURL.path) else {
                 throw VMBackendError.installMediaMissing(isoURL.path)
             }
@@ -224,6 +233,28 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
         let minM = VZVirtualMachineConfiguration.minimumAllowedMemorySize
         let maxM = VZVirtualMachineConfiguration.maximumAllowedMemorySize
         return min(max(requested, minM), maxM)
+    }
+
+    /// Reject a relative path that is not a single safe file component.
+    private static func validateSingleComponent(_ value: String, field: String) throws {
+        guard !value.isEmpty,
+              !value.hasPrefix("/"),
+              !value.contains("/"),
+              !value.contains("\\"),
+              value != "..",
+              value != "."
+        else {
+            throw VMBackendError.invalidConfiguration("\(field) must be a single file name, got '\(value)'")
+        }
+    }
+
+    /// Assert `url` resolves to a location inside `base`.
+    private static func assertInside(_ url: URL, _ base: URL) throws {
+        let basePath = base.standardizedFileURL.path
+        let target = url.standardizedFileURL.path
+        guard target == basePath || target.hasPrefix(basePath + "/") else {
+            throw VMBackendError.invalidConfiguration("path '\(target)' escapes the VM bundle")
+        }
     }
 
     private static func efiVariableStore(in bundleURL: URL) throws -> VZEFIVariableStore {
