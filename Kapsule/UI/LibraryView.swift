@@ -3,54 +3,38 @@
 
 import SwiftUI
 
-/// The main window: a sidebar of VMs and a detail pane.
+/// The main window: a sidebar of VMs and a detail pane. With no VMs, the detail pane *is*
+/// the OS catalog — the first thing a new user sees is the store, not a welcome wall.
 struct LibraryView: View {
     @EnvironmentObject private var library: VMLibraryViewModel
     @State private var selection: VirtualMachineModel.ID?
 
+    /// Drives the inline first-run catalog. Creating a VM here routes to the library.
+    @StateObject private var inlineCreate: CreateVMViewModel
+
+    init() {
+        // A placeholder; real wiring happens in `.onAppear` once the environment object
+        // is available. SwiftUI requires the StateObject be set in init.
+        _inlineCreate = StateObject(wrappedValue: CreateVMViewModel { _, _ in })
+    }
+
     var body: some View {
         NavigationSplitView {
-            List(library.references, selection: $selection) { ref in
-                HStack {
-                    Label(ref.model.name, systemImage: icon(for: ref.model.guest))
-                    if ref.isExternal {
-                        Spacer()
-                        Image(systemName: "externaldrive")
-                            .foregroundStyle(.secondary)
-                            .help("Stored outside the Kapsule library")
-                    }
-                }
-                .tag(ref.id)
-                .contextMenu {
-                    if ref.isExternal {
-                        Button("Remove from Library") { library.forget(ref) }
-                    }
-                    Button("Delete…", role: .destructive) { library.delete(ref) }
-                }
-            }
-            .navigationTitle("Kapsule")
-            .toolbar {
-                ToolbarItem {
-                    Button { library.beginNewVM() } label: { Image(systemName: "plus") }
-                        .help("New Virtual Machine")
-                }
-            }
+            sidebar
         } detail: {
-            if let id = selection, let ref = library.reference(for: id) {
-                VMDetailView(reference: ref)
-            } else if library.references.isEmpty {
-                WelcomeView { library.beginNewVM() }
-            } else {
-                ContentUnavailableView(
-                    "No Virtual Machine Selected",
-                    systemImage: "desktopcomputer",
-                    description: Text("Select a VM, or create one with the + button."))
-            }
+            detail
         }
         .sheet(isPresented: $library.isPresentingNewVM) {
             CreateVMView { model, location in
                 library.createVM(model, at: location)
             }
+        }
+        // The inline first-run catalog advances its download/configure steps in a sheet.
+        .sheet(isPresented: Binding(
+            get: { inlineCreate.isBeyondCatalog },
+            set: { if !$0 { inlineCreate.resetToCatalog() } })) {
+            CreateVMStepsView(vm: inlineCreate)
+                .frame(width: 780, height: 600)
         }
         .alert("Something went wrong",
                isPresented: Binding(get: { library.lastError != nil },
@@ -58,6 +42,49 @@ struct LibraryView: View {
             Button("OK", role: .cancel) { library.lastError = nil }
         } message: {
             Text(library.lastError ?? "")
+        }
+        .onAppear { inlineCreate.bindLibrary(library) }
+    }
+
+    private var sidebar: some View {
+        List(library.references, selection: $selection) { ref in
+            HStack {
+                Label(ref.model.name, systemImage: icon(for: ref.model.guest))
+                if ref.isExternal {
+                    Spacer()
+                    Image(systemName: "externaldrive")
+                        .foregroundStyle(.secondary)
+                        .help("Stored outside the Kapsule library")
+                }
+            }
+            .tag(ref.id)
+            .contextMenu {
+                if ref.isExternal {
+                    Button("Remove from Library") { library.forget(ref) }
+                }
+                Button("Delete…", role: .destructive) { library.delete(ref) }
+            }
+        }
+        .navigationTitle("Kapsule")
+        .toolbar {
+            ToolbarItem {
+                Button { library.beginNewVM() } label: { Image(systemName: "plus") }
+                    .help("New Virtual Machine")
+            }
+        }
+    }
+
+    @ViewBuilder private var detail: some View {
+        if let id = selection, let ref = library.reference(for: id) {
+            VMDetailView(reference: ref)
+        } else if library.references.isEmpty {
+            // First run: the catalog is the main surface, shown inline.
+            OSCatalogView(vm: inlineCreate)
+        } else {
+            ContentUnavailableView(
+                "No virtual machine selected",
+                systemImage: "desktopcomputer",
+                description: Text("Pick a VM from the list, or add one with the + button."))
         }
     }
 
@@ -67,29 +94,5 @@ struct LibraryView: View {
         case .windowsARM: return "window.casement"
         case .macOS: return "apple.logo"
         }
-    }
-}
-
-/// First-run welcome shown when the library is empty.
-struct WelcomeView: View {
-    let onCreate: () -> Void
-
-    var body: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "shippingbox.and.arrow.backward")
-                .font(.system(size: 64)).foregroundStyle(.tint)
-            Text("Welcome to Kapsule").font(.largeTitle.weight(.semibold))
-            Text("Run Windows, Linux, and other systems on your Mac.\nCreate your first virtual machine to get started.")
-                .multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Button(action: onCreate) {
-                Label("Create a Virtual Machine", systemImage: "plus")
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .padding(.top, 6)
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

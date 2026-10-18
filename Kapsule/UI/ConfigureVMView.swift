@@ -7,7 +7,6 @@ import SwiftUI
 struct ConfigureVMView: View {
     @ObservedObject var vm: CreateVMViewModel
     let entry: OSCatalogEntry?
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -58,9 +57,8 @@ struct ConfigureVMView: View {
 
             Divider()
             HStack {
-                Button("Back") { vm.step = .chooseSource }
+                Button("Back") { vm.resetToCatalog() }
                 Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
                 Button("Create") { vm.createVM() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!vm.canCreate)

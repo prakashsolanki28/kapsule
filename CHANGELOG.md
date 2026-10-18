@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **First run is the OS catalog, inline.** Removed the "Welcome to Kapsule" empty state and
+  the popup on first launch. When no VM exists, the main window shows the "Create New"
+  catalog directly (shared `OSCatalogView`); the download/configure steps present as a sheet
+  only after an OS is chosen. Cards are height-aligned into a clean grid with hover
+  elevation. The sheet still backs the toolbar "+" when VMs already exist.
 - **Redesigned "Create New" as an OS catalog.** Removed the Windows tile and the two-big-
   tiles layout in favor of an app-store-style grid of open-source operating-system cards.
   Each card wears its distribution's own brand accent (Ubuntu, Fedora, Debian, Alpine,

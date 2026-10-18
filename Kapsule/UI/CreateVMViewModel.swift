@@ -32,9 +32,30 @@ public final class CreateVMViewModel: ObservableObject {
     public let downloader = ImageDownloader()
 
     /// Completion: (model, customLocation). The library creates the VM on disk.
-    private let onCreated: (VirtualMachineModel, URL?) -> Void
+    private var onCreated: (VirtualMachineModel, URL?) -> Void
     public init(onCreated: @escaping (VirtualMachineModel, URL?) -> Void) {
         self.onCreated = onCreated
+    }
+
+    /// Wire an inline catalog's completion to the library once the environment object is
+    /// available (the inline model is created in `init` before the library exists).
+    public func bindLibrary(_ library: VMLibraryViewModel) {
+        onCreated = { [weak library] model, location in
+            library?.createVM(model, at: location)
+        }
+    }
+
+    /// True once the flow has advanced past the catalog (download or configure). The
+    /// inline surface presents these follow-up steps in a sheet.
+    public var isBeyondCatalog: Bool {
+        if case .chooseSource = step { return false }
+        return true
+    }
+
+    /// Return the inline flow to the catalog (used when its follow-up sheet is dismissed).
+    public func resetToCatalog() {
+        downloader.cancel()
+        step = .chooseSource
     }
 
     // MARK: Source selection
@@ -100,6 +121,8 @@ public final class CreateVMViewModel: ObservableObject {
             diskSizeGiB: diskGiB,
             installISOPath: isoPath)
         onCreated(model, customLocation)
+        // Return the inline flow to the catalog; the sheet path dismisses on isPresentingNewVM.
+        step = .chooseSource
     }
 
     public var canCreate: Bool {
