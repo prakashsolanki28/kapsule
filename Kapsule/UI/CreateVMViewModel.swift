@@ -37,22 +37,7 @@ public final class CreateVMViewModel: ObservableObject {
         self.onCreated = onCreated
     }
 
-    /// Wire an inline catalog's completion to the library once the environment object is
-    /// available (the inline model is created in `init` before the library exists).
-    public func bindLibrary(_ library: VMLibraryViewModel) {
-        onCreated = { [weak library] model, location in
-            library?.createVM(model, at: location)
-        }
-    }
-
-    /// True once the flow has advanced past the catalog (download or configure). The
-    /// inline surface presents these follow-up steps in a sheet.
-    public var isBeyondCatalog: Bool {
-        if case .chooseSource = step { return false }
-        return true
-    }
-
-    /// Return the inline flow to the catalog (used when its follow-up sheet is dismissed).
+    /// Return the create flow to the catalog step.
     public func resetToCatalog() {
         downloader.cancel()
         step = .chooseSource

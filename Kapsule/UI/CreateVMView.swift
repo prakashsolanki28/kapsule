@@ -31,27 +31,3 @@ struct CreateVMView: View {
         } message: { Text(vm.error ?? "") }
     }
 }
-
-/// The download/configure steps only — used as a sheet over the inline catalog, which
-/// renders `.chooseSource` itself.
-struct CreateVMStepsView: View {
-    @ObservedObject var vm: CreateVMViewModel
-
-    var body: some View {
-        Group {
-            switch vm.step {
-            case .chooseSource:
-                // Shouldn't appear here; render nothing while the sheet dismisses.
-                Color.clear
-            case .downloading(let e):
-                DownloadProgressView(downloader: vm.downloader, entry: e) { vm.resetToCatalog() }
-            case .configure(let e, _):
-                ConfigureVMView(vm: vm, entry: e)
-            }
-        }
-        .alert("Couldn’t continue",
-               isPresented: Binding(get: { vm.error != nil }, set: { if !$0 { vm.error = nil } })) {
-            Button("OK", role: .cancel) { vm.error = nil }
-        } message: { Text(vm.error ?? "") }
-    }
-}

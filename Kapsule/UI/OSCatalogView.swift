@@ -12,7 +12,8 @@ struct OSCatalogView: View {
     /// Shown inline (no chrome) vs. in a sheet (with a Cancel affordance).
     var onCancel: (() -> Void)?
 
-    private let columns = [GridItem(.adaptive(minimum: 320, maximum: 460), spacing: 18)]
+    // Wider minimum so two-line taglines fit without truncation.
+    private let columns = [GridItem(.adaptive(minimum: 360, maximum: 520), spacing: 18)]
 
     var body: some View {
         VStack(spacing: 0) {

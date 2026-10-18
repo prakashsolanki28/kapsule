@@ -11,9 +11,10 @@ struct KapsuleApp: App {
         WindowGroup {
             LibraryView()
                 .environmentObject(library)
-                .frame(minWidth: 820, minHeight: 520)
+                .frame(minWidth: 900, minHeight: 600)
         }
         .windowStyle(.titleBar)
+        .defaultSize(width: 1040, height: 680)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Virtual Machine…") { library.beginNewVM() }
