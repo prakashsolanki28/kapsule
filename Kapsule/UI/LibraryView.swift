@@ -10,61 +10,57 @@ struct LibraryView: View {
     @State private var selection: VirtualMachineModel.ID?
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-        } detail: {
-            detail
-        }
-        .sheet(isPresented: $library.isPresentingNewVM) {
-            CreateVMView { model, location in
-                library.createVM(model, at: location)
+        content
+            .sheet(isPresented: $library.isPresentingNewVM) {
+                CreateVMView { model, location in
+                    library.createVM(model, at: location)
+                }
             }
-        }
-        .alert("Something went wrong",
-               isPresented: Binding(get: { library.lastError != nil },
-                                    set: { if !$0 { library.lastError = nil } })) {
-            Button("OK", role: .cancel) { library.lastError = nil }
-        } message: {
-            Text(library.lastError ?? "")
+            .alert("Something went wrong",
+                   isPresented: Binding(get: { library.lastError != nil },
+                                        set: { if !$0 { library.lastError = nil } })) {
+                Button("OK", role: .cancel) { library.lastError = nil }
+            } message: {
+                Text(library.lastError ?? "")
+            }
+    }
+
+    @ViewBuilder private var content: some View {
+        if library.references.isEmpty {
+            // No VMs yet: just the Welcome page, full width, no sidebar.
+            WelcomeView { library.beginNewVM() }
+                .toolbar {
+                    ToolbarItem {
+                        Button { library.beginNewVM() } label: { Image(systemName: "plus") }
+                            .help("New Virtual Machine")
+                    }
+                }
+        } else {
+            NavigationSplitView {
+                sidebar
+            } detail: {
+                detail
+            }
         }
     }
 
     @ViewBuilder private var sidebar: some View {
-        Group {
-            if library.references.isEmpty {
-                // A quiet hint instead of a bare dark column on first run.
-                VStack(spacing: 10) {
-                    Image(systemName: "square.stack.3d.up.slash")
-                        .font(.system(size: 28))
-                        .foregroundStyle(.tertiary)
-                    Text("No virtual machines yet")
-                        .font(.callout)
+        List(library.references, selection: $selection) { ref in
+            HStack {
+                Label(ref.model.name, systemImage: icon(for: ref.model.guest))
+                if ref.isExternal {
+                    Spacer()
+                    Image(systemName: "externaldrive")
                         .foregroundStyle(.secondary)
-                    Text("Create one to see it here.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .help("Stored outside the Kapsule library")
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 20)
-            } else {
-                List(library.references, selection: $selection) { ref in
-                    HStack {
-                        Label(ref.model.name, systemImage: icon(for: ref.model.guest))
-                        if ref.isExternal {
-                            Spacer()
-                            Image(systemName: "externaldrive")
-                                .foregroundStyle(.secondary)
-                                .help("Stored outside the Kapsule library")
-                        }
-                    }
-                    .tag(ref.id)
-                    .contextMenu {
-                        if ref.isExternal {
-                            Button("Remove from Library") { library.forget(ref) }
-                        }
-                        Button("Delete…", role: .destructive) { library.delete(ref) }
-                    }
+            }
+            .tag(ref.id)
+            .contextMenu {
+                if ref.isExternal {
+                    Button("Remove from Library") { library.forget(ref) }
                 }
+                Button("Delete…", role: .destructive) { library.delete(ref) }
             }
         }
         .navigationTitle("Kapsule")
@@ -79,8 +75,6 @@ struct LibraryView: View {
     @ViewBuilder private var detail: some View {
         if let id = selection, let ref = library.reference(for: id) {
             VMDetailView(reference: ref)
-        } else if library.references.isEmpty {
-            WelcomeView { library.beginNewVM() }
         } else {
             ContentUnavailableView(
                 "No virtual machine selected",
