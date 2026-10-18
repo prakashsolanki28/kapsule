@@ -60,21 +60,45 @@ public final class VMStore {
         return try JSONDecoder().decode(VirtualMachineModel.self, from: data)
     }
 
-    /// Create a new VM bundle: its directory, config, and a sparse disk image.
+    /// Create a new VM bundle in the store's default `root`.
     @discardableResult
     public func create(_ model: VirtualMachineModel) throws -> URL {
+        try create(model, inParent: root)
+    }
+
+    /// Create a new VM bundle under `parent` (e.g. a user-chosen folder on an external
+    /// drive). All path validation is performed relative to `parent`, so the bundle and
+    /// its disk can never escape the chosen location. The returned URL is the bundle.
+    @discardableResult
+    public func create(_ model: VirtualMachineModel, inParent parent: URL) throws -> URL {
         try Self.validateRelativeFileName(model.diskImageRelativePath, field: "diskImageRelativePath")
-        let bundle = bundleURL(for: model)
-        try assertInsideRoot(bundle)
+        try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+        let bundle = parent.appendingPathComponent(
+            "\(model.id.uuidString).\(Self.bundleExtension)", isDirectory: true)
+        try Self.assertInside(bundle, parent)
         guard !fm.fileExists(atPath: bundle.path) else {
             throw VMStoreError.alreadyExists(model.name)
         }
         try fm.createDirectory(at: bundle, withIntermediateDirectories: true)
-        try save(model)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(model)
+            .write(to: bundle.appendingPathComponent(Self.configFileName), options: .atomic)
+
         let disk = bundle.appendingPathComponent(model.diskImageRelativePath)
-        try assertInsideRoot(disk)
+        try Self.assertInside(disk, bundle)
         try createSparseDisk(at: disk, size: model.diskSizeBytes)
         return bundle
+    }
+
+    /// Assert `url` resolves to a location inside `base`.
+    static func assertInside(_ url: URL, _ base: URL) throws {
+        let basePath = base.standardizedFileURL.path
+        let target = url.standardizedFileURL.path
+        guard target == basePath || target.hasPrefix(basePath + "/") else {
+            throw VMStoreError.pathEscapesRoot(target)
+        }
     }
 
     public func save(_ model: VirtualMachineModel) throws {

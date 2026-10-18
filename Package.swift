@@ -37,5 +37,12 @@ let package = Package(
             dependencies: ["KapsuleCore"],
             path: "Tools/vmcheck"
         ),
+        // Dev boot prober: starts a VM with a serial console and prints guest output.
+        // Run with: swift build --product bootprobe  (then sign + run; see scripts/).
+        .executableTarget(
+            name: "bootprobe",
+            dependencies: ["KapsuleCore"],
+            path: "Tools/bootprobe"
+        ),
     ]
 )

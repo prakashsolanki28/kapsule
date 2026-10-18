@@ -103,6 +103,22 @@ into this project (see [CONTRIBUTING.md](../CONTRIBUTING.md)).
 | Password / protection on VM actions | app-level gate in `VMStore` | ✅ |
 | Isolate VM from host (no sharing) | simply disable all host↔guest channels per VM | ✅ |
 
+## Importing VMs from other apps
+
+Kapsule can open VMs and disk images created elsewhere and convert them to its own raw
+format. Disk conversion is done by **`qemu-img`** (an open-source tool with read drivers
+for these formats) — Kapsule reverse-engineers nothing and copies no proprietary code.
+
+| Source | Config parsed | Disk | Status |
+|---|---|---|---|
+| **`.utm`** (UTM) | `config.plist` | qcow2 → raw | ✅ |
+| **`.pvm`** (Parallels) | `config.pvs` | Parallels HDD → raw (via qemu-img's `parallels` driver) | ✅ |
+| Bare disk image | — | qcow2 / vmdk / vhdx / img / raw → raw | ✅ |
+| **`.iso`** | — | — (install media) | ✅ via the normal install flow |
+
+Requires `brew install qemu`. The original files are never modified; the converted copy
+lives in the Kapsule VM bundle. See `Kapsule/Store/VMImporter.swift` and `DiskConverter.swift`.
+
 ## What Kapsule will *not* try to match
 
 - Proprietary guest drivers/tools shipped as closed binaries.

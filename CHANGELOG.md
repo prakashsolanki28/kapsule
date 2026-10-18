@@ -26,6 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `VZBackend` → `VZVirtualMachineConfiguration` path (signed with the entitlement) without
   needing a guest ISO. Verified passing on Apple Silicon (M4).
 
+- **"Create New" experience:** a first-run Welcome screen and a professional create flow
+  with a curated **OS catalog** (`OSCatalog`) — Ubuntu (direct download + checksum verify
+  via `ImageDownloader`), Fedora/Debian (vendor page), and Windows 11 ARM (opens Microsoft).
+  Plus a **Configure** step (CPU/RAM/disk) and a per-VM **install location** picker
+  (default library or a custom folder / external drive via `VMStore.create(_:inParent:)`).
+- **VM import:** open and run VMs from other apps. `VMImporter` reads **`.pvm`** (Parallels)
+  and **`.utm`** (UTM) bundles plus bare disk images; `DiskConverter` converts their disks
+  (qcow2, Parallels HDD, vmdk, vhdx…) to Kapsule's raw format using `qemu-img` — no
+  proprietary format is reverse-engineered, and originals are never modified. Verified by
+  importing a real UTM qcow2 VM to a valid raw GPT disk.
+
 ### Security
 
 - Hardened `VMStore` and `VZBackend` against path traversal: VM bundle directories are
