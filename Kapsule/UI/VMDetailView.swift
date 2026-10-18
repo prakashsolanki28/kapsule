@@ -3,91 +3,86 @@
 
 import SwiftUI
 
-/// Detail pane for a selected VM: summary + the console once running.
+/// Detail pane for a selected VM. The VM itself runs in its own window; this pane shows
+/// its specs and status, and starts/opens that window.
 struct VMDetailView: View {
     let reference: VMReference
-    @EnvironmentObject private var library: VMLibraryViewModel
-    @StateObject private var controller = VMController()
+    @EnvironmentObject private var sessions: VMSessionManager
+    @Environment(\.openWindow) private var openWindow
 
     private var model: VirtualMachineModel { reference.model }
-    @State private var stopAccess: (() -> Void)?
+    private var isRunning: Bool { sessions.controller(for: reference.id) != nil }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            console
-        }
-        .navigationTitle(model.name)
-        .onAppear {
-            // Hold security-scoped access to an external bundle while it's open.
-            if reference.isExternal { stopAccess = VMBookmarks.beginAccess(reference.bundleURL) }
-        }
-        .onDisappear {
-            Task { await controller.stopIfRunning() }
-            stopAccess?(); stopAccess = nil
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(model.name).font(.headline)
-                Text("\(model.cpuCount) CPU · \(model.memoryMiB / 1024) GB RAM · \(model.diskSizeGiB) GB disk")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text(controller.state.displayName)
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+        VStack(spacing: 24) {
             Spacer()
-            controls
+            icon
+            VStack(spacing: 6) {
+                Text(model.name).font(.title.weight(.semibold))
+                Text(specLine).font(.callout).foregroundStyle(.secondary)
+            }
+            statusPill
+            actions
+            Spacer()
         }
-        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
+        .navigationTitle(model.name)
     }
 
-    @ViewBuilder private var controls: some View {
-        if controller.state.canStart {
-            Button { start() } label: { Label("Start", systemImage: "play.fill") }
-                .buttonStyle(.borderedProminent)
-        }
-        if controller.state == .running {
-            Button { Task { try? await controller.pause() } } label: {
-                Label("Pause", systemImage: "pause.fill")
-            }
-        }
-        if controller.state == .paused {
-            Button { Task { try? await controller.resume() } } label: {
-                Label("Resume", systemImage: "play.fill")
-            }
-        }
-        if controller.state.canStop {
-            Button(role: .destructive) { Task { try? await controller.stop() } } label: {
-                Label("Stop", systemImage: "stop.fill")
-            }
-        }
+    private var icon: some View {
+        Image(systemName: iconName)
+            .font(.system(size: 64, weight: .light))
+            .foregroundStyle(.tint)
+            .symbolRenderingMode(.hierarchical)
     }
 
-    @ViewBuilder private var console: some View {
-        #if canImport(Virtualization)
-        if let vm = controller.liveMachine {
-            VZConsoleView(virtualMachine: vm)
+    private var statusPill: some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(isRunning ? Color.green : Color.secondary)
+                .frame(width: 7, height: 7)
+            Text(isRunning ? "Running" : "Stopped")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 5)
+        .background(Capsule().fill(.quaternary.opacity(0.5)))
+    }
+
+    @ViewBuilder private var actions: some View {
+        if isRunning {
+            Button {
+                openWindow(value: reference.id)       // bring the VM window forward
+            } label: {
+                Label("Show Window", systemImage: "macwindow")
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
         } else {
-            placeholder
+            Button {
+                sessions.startSession(for: reference)  // starts the VM…
+                openWindow(value: reference.id)        // …in its own window
+            } label: {
+                Label("Start", systemImage: "play.fill")
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .help("Start this machine in its own window")
         }
-        #else
-        placeholder
-        #endif
     }
 
-    private var placeholder: some View {
-        ContentUnavailableView(
-            "Not Running",
-            systemImage: "play.circle",
-            description: Text("Press Start to boot this virtual machine."))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    private var specLine: String {
+        "\(model.cpuCount) CPU · \(model.memoryMiB / 1024) GB RAM · \(model.diskSizeGiB) GB disk"
     }
 
-    private func start() {
-        // Access to an external bundle is held by onAppear for the view's lifetime.
-        Task { try? await controller.start(model: model, bundleURL: reference.bundleURL) }
+    private var iconName: String {
+        switch model.guest {
+        case .linux: return "terminal"
+        case .windowsARM: return "window.casement"
+        case .macOS: return "apple.logo"
+        }
     }
 }

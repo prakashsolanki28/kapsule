@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A running VM opens in its own window.** Installation and running now happen in a
+  dedicated VM window — a separate screen from the Kapsule app, full-screen capable — not
+  cramped in the library's detail pane. A new `VMSessionManager` (app-level) owns a running
+  session per VM so its window and the library share one live machine; the detail pane
+  becomes a clean status/launch screen (specs, Running/Stopped, Start / Show Window).
 - **First run is the OS catalog, inline.** Removed the "Welcome to Kapsule" empty state and
   the popup on first launch. When no VM exists, the main window shows the "Create New"
   catalog directly (shared `OSCatalogView`); the download/configure steps present as a sheet
