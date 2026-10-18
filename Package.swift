@@ -50,5 +50,11 @@ let package = Package(
             dependencies: ["KapsuleCore"],
             path: "Tools/bootshot"
         ),
+        // Dev: verifies the QEMU backend starts QEMU + swtpm and serves VNC.
+        .executableTarget(
+            name: "qemucheck",
+            dependencies: ["KapsuleCore"],
+            path: "Tools/qemucheck"
+        ),
     ]
 )

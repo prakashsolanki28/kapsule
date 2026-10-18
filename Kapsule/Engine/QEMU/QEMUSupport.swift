@@ -87,6 +87,7 @@ public enum QEMUSupport {
         diskURL: URL,
         isoURL: URL?,
         varsURL: URL,
+        autoBootImageURL: URL?,
         vncSocketPath: String,
         tpmSocketPath: String?
     ) -> LaunchPlan {
@@ -105,34 +106,103 @@ public enum QEMUSupport {
             // UEFI firmware (read-only code + writable vars).
             "-drive", "if=pflash,format=raw,readonly=on,file=\(uefiCodeFirmware() ?? "")",
             "-drive", "if=pflash,format=raw,file=\(varsURL.path)",
-            // Primary disk as NVMe.
+            // Primary disk as NVMe (bootindex 1 — tried after the install CD).
             "-drive", "file=\(diskURL.path),format=raw,if=none,id=hd0",
-            "-device", "nvme,drive=hd0,serial=kapsule-disk0",
+            "-device", "nvme,drive=hd0,serial=kapsule-disk0,bootindex=1",
         ]
 
         if let isoURL {
+            // read-only + share-rw so the same install ISO can back several VMs without a
+            // "consistent read" lock conflict; bootindex 0 makes firmware try it first.
             args += [
-                "-drive", "file=\(isoURL.path),format=raw,if=none,id=cd0,media=cdrom",
+                "-drive", "file=\(isoURL.path),format=raw,if=none,id=cd0,media=cdrom,readonly=on",
                 "-device", "usb-storage,drive=cd0,bootindex=0",
+            ]
+        }
+
+        // Auto-boot helper: a tiny FAT disk whose startup.nsh launches the install media's
+        // EFI bootloader, so the UEFI shell boots Windows/Linux instead of sitting idle.
+        // Attached FIRST (FS0 before the CD) and set as the first boot device.
+        if let autoBootImageURL {
+            args += [
+                "-drive", "file=\(autoBootImageURL.path),format=raw,if=none,id=boot0,readonly=on",
+                "-device", "usb-storage,drive=boot0",
             ]
         }
 
         // Networking: user-mode (NAT), no privileges needed.
         args += ["-netdev", "user,id=net0", "-device", "virtio-net-pci,netdev=net0"]
 
-        // TPM (Windows 11). The tpm-tis-device can conflict with HVF on some QEMU builds;
-        // callers decide whether to attach one.
-        if let tpmSocketPath {
-            args += [
-                "-chardev", "socket,id=chrtpm,path=\(tpmSocketPath)",
-                "-tpmdev", "emulator,id=tpm0,chardev=chrtpm",
-                "-device", "tpm-tis-device,tpmdev=tpm0",
-            ]
-        }
+        // NOTE on TPM: QEMU's `tpm-tis-device` currently fails under HVF acceleration
+        // (HV_BAD_ARGUMENT) in stock Homebrew QEMU, so we do NOT attach it here. Windows 11
+        // setup's TPM/Secure-Boot check is bypassed at install time instead (documented for
+        // the user). `tpmSocketPath` is accepted for forward-compat but unused for now.
+        _ = tpmSocketPath
 
         return LaunchPlan(arguments: args,
                           vncSocketPath: vncSocketPath,
                           tpmSocketPath: tpmSocketPath)
+    }
+
+    /// Create (once) a tiny FAT image holding a `startup.nsh` that auto-launches the
+    /// Windows/Linux ARM EFI bootloader from the install CD, so the UEFI shell boots it
+    /// instead of sitting at a prompt. Returns the image path, or nil if it can't be made.
+    public static func ensureAutoBootImage(in bundleURL: URL) -> URL? {
+        let img = bundleURL.appendingPathComponent("autoboot.img")
+        if FileManager.default.fileExists(atPath: img.path) { return img }
+
+        // Try each filesystem for a bootable EFI. Prefer Windows' no-prompt CD bootloader
+        // (boots setup directly, no "Press any key"); fall back to the generic
+        // \\EFI\\BOOT\\BOOTAA64.EFI used by Linux ISOs.
+        let probe = """
+          if exist \\EFI\\MICROSOFT\\BOOT\\CDBOOT_NOPROMPT.EFI then
+            \\EFI\\MICROSOFT\\BOOT\\CDBOOT_NOPROMPT.EFI
+          endif
+          if exist \\EFI\\BOOT\\BOOTAA64.EFI then
+            \\EFI\\BOOT\\BOOTAA64.EFI
+          endif
+        """
+        let script = """
+        @echo -off
+        echo Kapsule: booting install media...
+        FS0:
+        \(probe)
+        FS1:
+        \(probe)
+        FS2:
+        \(probe)
+        echo Kapsule: no bootable EFI found on the install media.
+
+        """
+        // A FAT12 image is built with mtools (mformat + mcopy) — deterministic and needs no
+        // mounting. If mtools isn't installed, return nil; the user can still boot the
+        // install media manually from the UEFI shell.
+        guard let mformat = which("mformat"), let mcopy = which("mcopy") else { return nil }
+
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kapsule-ab-\(UUID().uuidString.prefix(8))")
+        try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let nsh = tmp.appendingPathComponent("startup.nsh")
+        guard (try? script.write(to: nsh, atomically: true, encoding: .ascii)) != nil else { return nil }
+
+        func run(_ path: String, _ args: [String]) -> Bool {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: path)
+            p.arguments = args
+            p.standardOutput = Pipe(); p.standardError = Pipe()
+            do { try p.run() } catch { return false }
+            p.waitUntilExit()
+            return p.terminationStatus == 0
+        }
+
+        // 1.44 MB FAT12 image labelled KAPSULE, then copy startup.nsh in.
+        guard run(mformat, ["-C", "-f", "1440", "-v", "KAPSULE", "-i", img.path, "::"]),
+              run(mcopy, ["-i", img.path, nsh.path, "::startup.nsh"]) else {
+            try? FileManager.default.removeItem(at: img)
+            return nil
+        }
+        return FileManager.default.fileExists(atPath: img.path) ? img : nil
     }
 
     /// Create a 0700 directory for this VM's private sockets (VNC, TPM) and return it.

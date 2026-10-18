@@ -66,9 +66,13 @@ public final class QEMUBackend: VMBackend, @unchecked Sendable {
             tpmSocketPath = try? startTPM(for: model, in: sockDir)
         }
 
+        // Auto-boot the install media (only needed while an ISO is attached).
+        let autoBoot = iso != nil ? QEMUSupport.ensureAutoBootImage(in: bundleURL) : nil
+
         let plan = QEMUSupport.buildArguments(
             model: model, bundleURL: bundleURL, diskURL: disk, isoURL: iso,
-            varsURL: vars, vncSocketPath: vncSock, tpmSocketPath: tpmSocketPath)
+            varsURL: vars, autoBootImageURL: autoBoot,
+            vncSocketPath: vncSock, tpmSocketPath: tpmSocketPath)
 
         subject.send(.starting)
         let proc = Process()
