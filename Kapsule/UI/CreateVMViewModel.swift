@@ -13,12 +13,10 @@ public final class CreateVMViewModel: ObservableObject {
         case chooseSource
         case configure(OSCatalogEntry?, isoPath: String?)
         case downloading(OSCatalogEntry)
-        case importing(name: String)
     }
 
     @Published public var step: Step = .chooseSource
     @Published public var error: String?
-    @Published public var importFraction: Double = 0
 
     // Configuration being edited.
     @Published public var name = ""
@@ -33,11 +31,9 @@ public final class CreateVMViewModel: ObservableObject {
     public let catalog = OSCatalog.entries
     public let downloader = ImageDownloader()
 
-    /// Completion: (model, customLocation, alreadyCreatedOnDisk).
-    /// `alreadyCreatedOnDisk` is true for imports (the bundle already exists), so the
-    /// library should just reload rather than create it again.
-    private let onCreated: (VirtualMachineModel, URL?, Bool) -> Void
-    public init(onCreated: @escaping (VirtualMachineModel, URL?, Bool) -> Void) {
+    /// Completion: (model, customLocation). The library creates the VM on disk.
+    private let onCreated: (VirtualMachineModel, URL?) -> Void
+    public init(onCreated: @escaping (VirtualMachineModel, URL?) -> Void) {
         self.onCreated = onCreated
     }
 
@@ -72,75 +68,6 @@ public final class CreateVMViewModel: ObservableObject {
         step = .configure(nil, isoPath: url.path)
     }
 
-    /// Open a VM from another app (.pvm / .utm) or any disk image, and import it. An .iso
-    /// instead goes through the normal install flow.
-    public func openForImport() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = true          // .pvm/.utm are package directories
-        panel.canChooseFiles = true
-        panel.message = "Choose a VM bundle (.pvm, .utm), a disk image, or an ISO."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        handleOpenedURL(url)
-    }
-
-    /// Route an opened file/bundle: ISO → install flow; everything else → import.
-    public func handleOpenedURL(_ url: URL) {
-        do {
-            let plan = try VMImporter.plan(for: url)
-            if let iso = plan.isoPath {         // an .iso: normal install
-                isoPath = iso
-                name = plan.suggestedName
-                guest = plan.guest
-                step = .configure(nil, isoPath: iso)
-                return
-            }
-            // A VM bundle or disk image: import (convert) it.
-            self.name = plan.suggestedName
-            self.guest = plan.guest
-            self.cpuCount = plan.cpuCount
-            self.memoryGiB = max(1, plan.memoryMiB / 1024)
-            Task { await runImport(plan) }
-        } catch {
-            self.error = describe(error)
-        }
-    }
-
-    private func runImport(_ plan: VMImporter.Plan) async {
-        guard let store = try? VMStore() else { error = "No VM library."; return }
-        step = .importing(name: name)
-        importFraction = 0
-        let planCopy = plan
-        let vmName = name
-        let parent = customLocation
-        do {
-            let model = try await Task.detached(priority: .userInitiated) { [weak self] in
-                try VMImporter.perform(planCopy, name: vmName, into: store, parent: parent) { frac in
-                    Task { @MainActor in self?.importFraction = frac }
-                }
-            }.value
-            onCreated(model, parent, true)   // imported: bundle already on disk
-        } catch {
-            self.error = describe(error)
-            step = .chooseSource
-        }
-    }
-
-    private func describe(_ error: Error) -> String {
-        if let e = error as? ImportError {
-            switch e {
-            case .qemuMissing:
-                return "This VM uses a disk format Kapsule converts with QEMU, which isn’t installed. Install it with: brew install qemu"
-            case .unsupportedBundle(let n): return "Kapsule can’t open “\(n)”. Supported: .pvm, .utm, .iso, and disk images."
-            case .diskNotFound(let n): return "No disk found inside “\(n)”."
-            case .diskUnreadable(let n): return "Couldn’t read the disk “\(n)”."
-            case .conversionFailed(let m): return "Disk conversion failed: \(m)"
-            case .configUnreadable(let n): return "Couldn’t read the configuration in “\(n)”."
-            }
-        }
-        return error.localizedDescription
-    }
-
     public func chooseInstallLocation() {
         if let url = Self.runOpenPanel(forISO: false, chooseDirectory: true) {
             customLocation = url
@@ -172,7 +99,7 @@ public final class CreateVMViewModel: ObservableObject {
             memoryMiB: memoryGiB * 1024,
             diskSizeGiB: diskGiB,
             installISOPath: isoPath)
-        onCreated(model, customLocation, false)   // needs creating on disk
+        onCreated(model, customLocation)
     }
 
     public var canCreate: Bool {
@@ -189,8 +116,10 @@ public final class CreateVMViewModel: ObservableObject {
         panel.canChooseDirectories = chooseDirectory
         panel.canChooseFiles = !chooseDirectory
         panel.canCreateDirectories = chooseDirectory
-        if forISO, let iso = UTType(filenameExtension: "iso") {
-            panel.allowedContentTypes = [iso, .diskImage]
+        if forISO {
+            // ISO install media only — Kapsule installs a fresh OS from an ISO.
+            panel.allowedContentTypes = [UTType(filenameExtension: "iso")].compactMap { $0 }
+            panel.message = "Choose an installer ISO."
         }
         return panel.runModal() == .OK ? panel.url : nil
     }

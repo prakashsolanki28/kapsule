@@ -9,7 +9,7 @@ struct CreateVMView: View {
     @StateObject private var vm: CreateVMViewModel
     @Environment(\.dismiss) private var dismiss
 
-    init(onCreated: @escaping (VirtualMachineModel, URL?, Bool) -> Void) {
+    init(onCreated: @escaping (VirtualMachineModel, URL?) -> Void) {
         _vm = StateObject(wrappedValue: CreateVMViewModel(onCreated: onCreated))
     }
 
@@ -19,7 +19,6 @@ struct CreateVMView: View {
             case .chooseSource:          sourcePicker
             case .downloading(let e):    DownloadProgressView(downloader: vm.downloader, entry: e) { vm.downloader.cancel() }
             case .configure(let e, _):   ConfigureVMView(vm: vm, entry: e)
-            case .importing(let name):   ImportProgressView(name: name, fraction: vm.importFraction)
             }
         }
         .frame(width: 720, height: 560)
@@ -55,7 +54,7 @@ struct CreateVMView: View {
 
     private var imageFileTile: some View {
         BigTile(symbol: "opticaldiscdrive", tint: .secondary,
-                title: "Install Windows,\nLinux, or macOS\nfrom an image file") {
+                title: "Install from\nan ISO file") {
             vm.chooseImageFile()
         }
     }
@@ -69,9 +68,7 @@ struct CreateVMView: View {
                 }
             }
             HStack {
-                Button("Open…") { vm.chooseImageFile() }
-                Button("Open VM or Disk…") { vm.openForImport() }
-                    .help("Import a .pvm, .utm, or disk image (qcow2, vmdk, img…)")
+                Button("Choose ISO…") { vm.chooseImageFile() }
                 Spacer()
                 Button("Cancel") { dismiss() }
             }
@@ -107,25 +104,6 @@ private struct BigTile: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
-    }
-}
-
-private struct ImportProgressView: View {
-    let name: String
-    let fraction: Double
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "arrow.down.doc").font(.system(size: 56))
-            Text("Importing \(name)").font(.title2.weight(.semibold))
-            ProgressView(value: fraction).frame(width: 360)
-            Text("Converting disk to Kapsule’s format… \(Int(fraction * 100))%")
-                .font(.callout).foregroundStyle(.secondary).monospacedDigit()
-            Text("Large disks can take a few minutes. The original is left untouched.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

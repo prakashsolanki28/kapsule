@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Simplified to ISO-only installs.** Removed the VM import/conversion subsystem
+  (`VMImporter`, `DiskConverter`) and the dependency on `qemu-img`: Kapsule no longer opens
+  or converts `.pvm`/`.utm` bundles or foreign disk images. The create flow keeps the
+  "Create New" screen — download a catalog OS or choose an ISO — then pick settings and
+  install. This removes a large, security-sensitive surface (disk-image parsing of untrusted
+  files) in favor of one clean path. External-VM bookmarks and custom install locations are
+  kept.
+
 ### Added
 
 - Initial open-source project scaffolding: README, Apache-2.0 license, contributing and

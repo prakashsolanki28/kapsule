@@ -103,21 +103,17 @@ into this project (see [CONTRIBUTING.md](../CONTRIBUTING.md)).
 | Password / protection on VM actions | app-level gate in `VMStore` | ✅ |
 | Isolate VM from host (no sharing) | simply disable all host↔guest channels per VM | ✅ |
 
-## Importing VMs from other apps
+## Installing an OS
 
-Kapsule can open VMs and disk images created elsewhere and convert them to its own raw
-format. Disk conversion is done by **`qemu-img`** (an open-source tool with read drivers
-for these formats) — Kapsule reverse-engineers nothing and copies no proprietary code.
+Kapsule creates VMs by installing a fresh OS from an **ISO**:
 
-| Source | Config parsed | Disk | Status |
-|---|---|---|---|
-| **`.utm`** (UTM) | `config.plist` | qcow2 → raw | ✅ |
-| **`.pvm`** (Parallels) | `config.pvs` | Parallels HDD → raw (via qemu-img's `parallels` driver) | ✅ |
-| Bare disk image | — | qcow2 / vmdk / vhdx / img / raw → raw | ✅ |
-| **`.iso`** | — | — (install media) | ✅ via the normal install flow |
+- **Free Systems catalog** — download a popular ARM64 OS (Ubuntu in-app with checksum
+  verification; Fedora/Debian via their pages) — see `OSCatalog` / `ImageDownloader`.
+- **Choose an ISO file** — point Kapsule at any installer ISO you already have.
 
-Requires `brew install qemu`. The original files are never modified; the converted copy
-lives in the Kapsule VM bundle. See `Kapsule/Store/VMImporter.swift` and `DiskConverter.swift`.
+Then pick settings (CPU, memory, disk size, install location) and install. Kapsule does
+not import or convert other apps' VM bundles (`.pvm`, `.utm`) or foreign disk images; it
+keeps a single, simple, secure path — install from an ISO.
 
 ## What Kapsule will *not* try to match
 

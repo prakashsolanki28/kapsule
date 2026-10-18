@@ -48,8 +48,8 @@ struct LibraryView: View {
             }
         }
         .sheet(isPresented: $library.isPresentingNewVM) {
-            CreateVMView { model, location, alreadyCreated in
-                library.createVM(model, at: location, alreadyCreated: alreadyCreated)
+            CreateVMView { model, location in
+                library.createVM(model, at: location)
             }
         }
         .alert("Something went wrong",

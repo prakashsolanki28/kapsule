@@ -20,31 +20,6 @@ if args.count >= 3, args[1] == "--bookmark" {
     exit(0)
 }
 
-// --import-plan <bundle>  : detect format + parse config, no conversion.
-if args.count >= 3, args[1] == "--import-plan" {
-    let src = URL(fileURLWithPath: args[2])
-    let plan = try VMImporter.plan(for: src)
-    print("✓ import plan for \(src.lastPathComponent):")
-    print("  name=\(plan.suggestedName) guest=\(plan.guest) cpu=\(plan.cpuCount) ram=\(plan.memoryMiB)MiB")
-    print("  sourceDisk=\(plan.sourceDisk?.lastPathComponent ?? "none") format=\(plan.sourceDiskFormat ?? "-") iso=\(plan.isoPath ?? "-")")
-    print("  qemu-img: \(DiskConverter.qemuImgPath() ?? "NOT FOUND")")
-    exit(0)
-}
-
-// --import <bundle> <name> <root>  : full conversion into a Kapsule VM.
-if args.count >= 5, args[1] == "--import" {
-    let src = URL(fileURLWithPath: args[2])
-    let name = args[3]
-    let store = try VMStore(root: URL(fileURLWithPath: args[4]))
-    let plan = try VMImporter.plan(for: src)
-    print("Importing \(src.lastPathComponent) (\(plan.sourceDiskFormat ?? "?")) → Kapsule…")
-    let model = try VMImporter.perform(plan, name: name, into: store) { frac in
-        if Int(frac * 100) % 10 == 0 { print("  \(Int(frac*100))%") }
-    }
-    print("✅ imported '\(model.name)' (\(model.diskSizeGiB) GB disk).")
-    exit(0)
-}
-
 if args.count >= 5, args[1] == "--create" {
     let name = args[2]
     let iso = args[3]

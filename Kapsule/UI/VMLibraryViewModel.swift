@@ -34,27 +34,18 @@ public final class VMLibraryViewModel: ObservableObject {
     public func beginNewVM() { isPresentingNewVM = true }
 
     /// Create a VM, optionally under a user-chosen parent folder (external drive, etc.).
-    /// When `alreadyCreated` is true (an import), the bundle already exists on disk; we
-    /// bookmark it if it's external and reload.
-    public func createVM(_ model: VirtualMachineModel, at customLocation: URL? = nil,
-                         alreadyCreated: Bool = false) {
+    public func createVM(_ model: VirtualMachineModel, at customLocation: URL? = nil) {
         guard let store else { return }
         do {
-            var bundle: URL
-            if alreadyCreated {
-                // Imports already created the bundle; compute its location.
-                bundle = (customLocation ?? store.root)
-                    .appendingPathComponent("\(model.id.uuidString).\(VMStore.bundleExtension)",
-                                            isDirectory: true)
-            } else if let parent = customLocation {
+            let bundle: URL
+            if let parent = customLocation {
                 bundle = try store.create(model, inParent: parent)
+                // A VM outside the default library is remembered via a bookmark.
+                try store.rememberExternal(bundle)
             } else {
                 bundle = try store.create(model)
             }
-            // A VM outside the default library is remembered via a bookmark.
-            if customLocation != nil {
-                try store.rememberExternal(bundle)
-            }
+            _ = bundle
             reload()
             isPresentingNewVM = false
         } catch {
