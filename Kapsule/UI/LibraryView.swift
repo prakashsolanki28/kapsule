@@ -96,11 +96,10 @@ struct LibraryView: View {
         }
     }
 
-    /// Open a VM: start it if no session exists, then bring its window forward.
+    /// Open a VM's window. The window starts the session itself (via the pending
+    /// reference), so there's no race between opening and registering the session.
     private func open(_ ref: VMReference) {
-        if !sessions.hasSession(ref.id) {
-            sessions.startSession(for: ref)
-        }
+        sessions.prepareToOpen(ref)
         openWindow(value: ref.id)
     }
 

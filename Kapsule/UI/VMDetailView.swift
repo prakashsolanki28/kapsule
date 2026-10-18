@@ -65,8 +65,8 @@ struct VMDetailView: View {
             .controlSize(.large)
         } else {
             Button {
-                sessions.startSession(for: reference)  // starts the VM…
-                openWindow(value: reference.id)        // …in its own window
+                sessions.prepareToOpen(reference)  // the window starts the VM on appear
+                openWindow(value: reference.id)    // …in its own window
             } label: {
                 Label("Start", systemImage: "play.fill")
                     .padding(.horizontal, 10).padding(.vertical, 4)

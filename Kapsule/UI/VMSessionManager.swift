@@ -14,6 +14,9 @@ final class VMSessionManager: ObservableObject {
     /// The reference backing each session, so a window can show name/specs and release
     /// security-scoped access when the session ends.
     private var references: [VirtualMachineModel.ID: VMReference] = [:]
+    /// References intended to start — set just before a VM window opens, so the window can
+    /// start the session itself without a race.
+    private var pendingReferences: [VirtualMachineModel.ID: VMReference] = [:]
     private var accessStops: [VirtualMachineModel.ID: () -> Void] = [:]
     /// Watches each controller's state so a guest-initiated shutdown tears the session
     /// down and releases its resources — not only an app-initiated stop.
@@ -26,7 +29,18 @@ final class VMSessionManager: ObservableObject {
     /// The controller for a VM, if a session exists.
     func controller(for id: VirtualMachineModel.ID) -> VMController? { sessions[id] }
 
-    func reference(for id: VirtualMachineModel.ID) -> VMReference? { references[id] }
+    func reference(for id: VirtualMachineModel.ID) -> VMReference? {
+        references[id] ?? pendingReferences[id]
+    }
+
+    /// The reference to start for a VM that has no session yet.
+    func pendingReference(for id: VirtualMachineModel.ID) -> VMReference? { pendingReferences[id] }
+
+    /// Register the intent to open/run a VM, just before opening its window. The window's
+    /// onAppear starts the session from this, avoiding any ordering race.
+    func prepareToOpen(_ reference: VMReference) {
+        pendingReferences[reference.id] = reference
+    }
 
     /// Whether a session exists for this VM at all (starting, running, paused, or in an
     /// error state that still holds the machine/resources). UI gates for destructive and
@@ -49,6 +63,7 @@ final class VMSessionManager: ObservableObject {
         let controller = VMController()
         sessions[id] = controller
         references[id] = reference
+        pendingReferences[id] = nil
 
         // Hold security-scoped access to an external bundle for the session's lifetime.
         if reference.isExternal {
@@ -102,6 +117,7 @@ final class VMSessionManager: ObservableObject {
         stateWatchers[id] = nil
         sessions[id] = nil
         references[id] = nil
+        pendingReferences[id] = nil
         accessStops[id]?()
         accessStops[id] = nil
     }

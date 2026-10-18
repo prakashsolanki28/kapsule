@@ -10,17 +10,54 @@ struct VMWindowView: View {
     @EnvironmentObject private var sessions: VMSessionManager
     @Environment(\.dismiss) private var dismiss
 
+    /// Once a session has been seen for this window, losing it means the VM stopped and the
+    /// window should close. Before that, a nil session is just "not started yet" — so the
+    /// window never dismisses itself during the brief gap before the session registers.
+    @State private var hadSession = false
+
     var body: some View {
         Group {
             if let controller = sessions.controller(for: vmID) {
                 content(controller)
-            } else {
-                // The session ended (VM stopped) — close this window.
+                    .onAppear { hadSession = true }
+            } else if hadSession {
+                // A session existed and is now gone — the VM stopped. Close the window.
                 Color(nsColor: .windowBackgroundColor)
                     .onAppear { dismiss() }
+            } else {
+                // No session yet. Either it's starting, or this window was restored on
+                // launch without one — show a start affordance rather than flashing shut.
+                idle
             }
         }
         .navigationTitle(sessions.reference(for: vmID)?.model.name ?? "Virtual Machine")
+        // The window owns its own start: if it opened for a VM that has no session yet,
+        // start it here. This removes any race between opening the window and registering
+        // the session elsewhere.
+        .onAppear {
+            if sessions.controller(for: vmID) == nil,
+               let ref = sessions.pendingReference(for: vmID) {
+                sessions.startSession(for: ref)
+            }
+        }
+    }
+
+    /// Shown when the window has no session yet (e.g. restored on launch).
+    private var idle: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "play.circle")
+                .font(.system(size: 52)).foregroundStyle(.secondary)
+            Text("This machine isn’t running.")
+                .foregroundStyle(.secondary)
+            if let ref = sessions.reference(for: vmID) {
+                Button("Start") { sessions.startSession(for: ref) }
+                    .buttonStyle(.borderedProminent)
+            } else {
+                Button("Close") { dismiss() }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     @ViewBuilder private func content(_ controller: VMController) -> some View {
