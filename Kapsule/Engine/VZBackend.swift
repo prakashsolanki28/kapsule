@@ -72,6 +72,8 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
             config.bootLoader = efi
             config.platform = VZGenericPlatformConfiguration()
         case .windowsARM:
+            // Windows 11 on ARM: EFI boot + a generic platform, plus TPM 2.0 (Windows 11
+            // setup requires a TPM). The TPM is configured below after the platform is set.
             let efi = VZEFIBootLoader()
             efi.variableStore = try efiVariableStore(in: bundleURL)
             config.bootLoader = efi
@@ -106,8 +108,8 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
             // installed system).
             if FileManager.default.fileExists(atPath: isoURL.path) {
                 let isoAttachment = try VZDiskImageStorageDeviceAttachment(url: isoURL, readOnly: true)
-                // Attach the install ISO as a read-only virtio block device. Apple's EFI
-                // boots a virtio-blk CD reliably, whereas USB mass-storage boot is flaky.
+                // Attach the install ISO as a read-only virtio block device; Apple's EFI
+                // boots a virtio-blk CD reliably for Linux.
                 storage.append(VZVirtioBlockDeviceConfiguration(attachment: isoAttachment))
                 installMediaAttached = true
             }
