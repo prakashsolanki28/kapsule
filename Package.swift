@@ -30,5 +30,12 @@ let package = Package(
             dependencies: ["KapsuleCore"],
             path: "Tests/KapsuleTests"
         ),
+        // Dev smoke test: validates the VZBackend config path on this machine.
+        // Run with: swift run vmcheck
+        .executableTarget(
+            name: "vmcheck",
+            dependencies: ["KapsuleCore"],
+            path: "Tools/vmcheck"
+        ),
     ]
 )

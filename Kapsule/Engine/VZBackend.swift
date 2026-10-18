@@ -48,7 +48,10 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
     ///
     /// Milestone 1 covers Linux boot from an ISO. Windows (EFI) and macOS guests are
     /// added in later milestones; see docs/FEATURE_REFERENCE.md.
-    static func buildConfiguration(
+    ///
+    /// Exposed `public` so dev tooling (Tools/vmcheck) can validate the config path
+    /// without launching a VM.
+    public static func buildConfiguration(
         model: VirtualMachineModel,
         bundleURL: URL
     ) throws -> VZVirtualMachineConfiguration {

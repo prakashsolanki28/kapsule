@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   app entitlements, and a passing test suite. CI builds and tests the core on every PR.
 - **Buildable app:** XcodeGen spec (`project.yml`), app `Info.plist`, and a dev-only
   entitlements file. `Kapsule.app` builds, signs, and launches on Apple Silicon.
+- **Engine smoke test:** `Tools/vmcheck` + `scripts/vmcheck.sh` validate the real
+  `VZBackend` → `VZVirtualMachineConfiguration` path (signed with the entitlement) without
+  needing a guest ISO. Verified passing on Apple Silicon (M4).
 
 ### Security
 

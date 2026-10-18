@@ -39,6 +39,20 @@ swift test       # runs the unit/backend tests (uses MockBackend; no VM launched
 This is what CI runs on every PR, so you can develop and verify most logic without the
 SwiftUI app.
 
+### Smoke-test the real VM engine (no ISO needed)
+
+To confirm `VZBackend` builds a valid `VZVirtualMachineConfiguration` on this machine —
+the thing that most often fails on a new setup — run:
+
+```bash
+./scripts/vmcheck.sh
+```
+
+It builds a small harness, signs it ad-hoc with the virtualization entitlement (required
+even to *validate* a config), creates a throwaway VM bundle, and asks Apple's framework to
+validate the configuration. A green `✅ VZBackend config path works` means the engine is
+good and all that's left to boot is a guest ISO.
+
 ### The app
 
 The Xcode project is generated from `project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen)
