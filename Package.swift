@@ -44,5 +44,11 @@ let package = Package(
             dependencies: ["KapsuleCore"],
             path: "Tools/bootprobe"
         ),
+        // Dev: boots a VM in a window and screenshots the guest framebuffer.
+        .executableTarget(
+            name: "bootshot",
+            dependencies: ["KapsuleCore"],
+            path: "Tools/bootshot"
+        ),
     ]
 )

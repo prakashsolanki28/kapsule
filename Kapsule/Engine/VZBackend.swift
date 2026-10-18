@@ -100,7 +100,9 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
                 throw VMBackendError.installMediaMissing(isoURL.path)
             }
             let isoAttachment = try VZDiskImageStorageDeviceAttachment(url: isoURL, readOnly: true)
-            storage.append(VZUSBMassStorageDeviceConfiguration(attachment: isoAttachment))
+            // Attach the install ISO as a read-only virtio block device. Apple's EFI boots
+            // a virtio-blk CD reliably, whereas USB mass-storage boot is flaky.
+            storage.append(VZVirtioBlockDeviceConfiguration(attachment: isoAttachment))
         }
         config.storageDevices = storage
 

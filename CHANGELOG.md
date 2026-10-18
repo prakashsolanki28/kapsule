@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Guests now boot from the install ISO.** The ISO is attached as a read-only virtio
+  block device instead of USB mass storage, which Apple's EFI boots reliably. Verified end
+  to end: a freshly-created VM boots Alpine Linux to a login prompt on Apple Silicon.
+
 ### Changed
 
 - **Redesigned "Create New" as an OS catalog.** Removed the Windows tile and the two-big-
