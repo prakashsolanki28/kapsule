@@ -1,0 +1,34 @@
+// swift-tools-version: 6.0
+// Kapsule — Copyright 2026 The Kapsule Authors. Apache-2.0.
+//
+// This package builds the testable core (models, store, engine abstraction, backends)
+// so logic and tests run from the command line without full Xcode. The SwiftUI app
+// target (KapsuleApp) is built in Xcode, which opens this Package directly; see
+// docs/DEVELOPMENT.md.
+
+import PackageDescription
+
+let package = Package(
+    name: "Kapsule",
+    platforms: [.macOS(.v14)],
+    products: [
+        .library(name: "KapsuleCore", targets: ["KapsuleCore"]),
+    ],
+    targets: [
+        .target(
+            name: "KapsuleCore",
+            path: "Kapsule",
+            exclude: [
+                // UI and the @main app entry are built by the Xcode app target, not here.
+                "App",
+                "UI",
+                "Resources",
+            ]
+        ),
+        .testTarget(
+            name: "KapsuleTests",
+            dependencies: ["KapsuleCore"],
+            path: "Tests/KapsuleTests"
+        ),
+    ]
+)

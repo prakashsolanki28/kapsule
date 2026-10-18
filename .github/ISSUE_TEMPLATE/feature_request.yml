@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest an idea or enhancement for Kapsule
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the user need, not just the solution.
+      placeholder: As a user running Windows on ARM, I need to share a folder with the guest so that...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      placeholder: Add a "Shared Folders" section in VM settings backed by virtiofs...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: roadmap
+    attributes:
+      label: Which milestone does this fit?
+      options:
+        - Not sure
+        - M2 — App shell
+        - M3 — VM configuration
+        - M4 — Windows & integration
+        - M5 — Polish / release
+        - Later / exploratory
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Checks
+      options:
+        - label: I've read the ROADMAP and this isn't already planned or a non-goal.
+        - label: I'm willing to help implement or test this.

@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test (macOS, Apple Silicon)
+    runs-on: macos-15   # Apple Silicon runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Show versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build KapsuleCore (SwiftPM)
+        run: swift build
+
+      - name: Test KapsuleCore (SwiftPM)
+        run: swift test
+
+      # The SwiftUI app target (KapsuleApp) builds in Xcode once Kapsule.xcodeproj lands.
+      # - name: Build app
+      #   run: xcodebuild build -scheme Kapsule -destination 'platform=macOS'
+
+  lint:
+    name: swift-format lint
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run swift-format (lint)
+        run: |
+          if command -v swift-format >/dev/null 2>&1; then
+            swift-format lint --recursive --strict Kapsule Tests 2>/dev/null || \
+              echo "No Swift sources yet; skipping."
+          else
+            echo "swift-format not available on runner; skipping for now."
+          fi

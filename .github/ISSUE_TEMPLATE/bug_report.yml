@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a problem with Kapsule
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug! Please fill in as much as you can — it makes fixing it far faster.
+        **Do not report security vulnerabilities here** — see [SECURITY.md](../blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I start a Linux VM, the console window stays black...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a new VM with ...
+        2. Start it
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: guest
+    attributes:
+      label: Guest OS and image
+      placeholder: Ubuntu 24.04 Server (ARM64) / Windows 11 ARM Insider build 2xxxx
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Mac hardware
+      placeholder: MacBook Air M4, 16 GB
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: macOS 15.1
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Kapsule version / commit
+      placeholder: 0.1.0 or git commit sha
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste relevant log output or attach screenshots. Remove anything sensitive.
+      render: shell

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required to create and run any VM with Virtualization.framework. -->
+	<key>com.apple.security.virtualization</key>
+	<true/>
+
+	<!-- App Sandbox. Kapsule needs user-selected file access for ISOs and VM bundles. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Bridged networking (Milestone later). Requires an Apple provisioning profile;
+	     keep commented until that entitlement is granted.
+	<key>com.apple.vm.networking</key>
+	<true/>
+	-->
+</dict>
+</plist>
