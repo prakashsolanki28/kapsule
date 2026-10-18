@@ -38,7 +38,7 @@ struct OSCatalogView: View {
                 Text("Create New")
                     .font(.system(size: 30, weight: .bold))
                     .tracking(-0.4)
-                Text("Choose an operating system to install, or use your own ISO.")
+                Text("Pick an operating system to install, or use an installer file you already have.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -59,7 +59,7 @@ struct OSCatalogView: View {
             Image(systemName: "checkmark.seal")
                 .foregroundStyle(.secondary)
                 .font(.caption)
-            Text("Images download from each project and are verified against a published checksum.")
+            Text("Each system is downloaded from its official source and checked for integrity.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -123,6 +123,12 @@ struct OSCard: View {
         .buttonStyle(.plain)
         .onHover { hover = $0 }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: hover)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(entry.name). \(entry.tagline)")
+        .accessibilityHint(entry.isDownloadable
+            ? "Downloads \(entry.name) and sets up a new machine."
+            : "Opens the \(entry.name) download page in your browser.")
+        .accessibilityAddTraits(.isButton)
     }
 
     /// A rounded square washed in the distro's accent, carrying its glyph.
