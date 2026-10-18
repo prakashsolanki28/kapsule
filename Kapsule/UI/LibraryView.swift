@@ -7,6 +7,8 @@ import SwiftUI
 /// Welcome page; its button opens the OS catalog in a sheet.
 struct LibraryView: View {
     @EnvironmentObject private var library: VMLibraryViewModel
+    @EnvironmentObject private var sessions: VMSessionManager
+    @Environment(\.openWindow) private var openWindow
     @State private var selection: VirtualMachineModel.ID?
 
     var body: some View {
@@ -48,7 +50,11 @@ struct LibraryView: View {
         List(library.references, selection: $selection) { ref in
             HStack {
                 Label(ref.model.name, systemImage: icon(for: ref.model.guest))
-                if ref.isExternal {
+                if sessions.controller(for: ref.id) != nil {
+                    Spacer()
+                    Circle().fill(Color.green).frame(width: 7, height: 7)
+                        .help("Running")
+                } else if ref.isExternal {
                     Spacer()
                     Image(systemName: "externaldrive")
                         .foregroundStyle(.secondary)
@@ -56,11 +62,20 @@ struct LibraryView: View {
                 }
             }
             .tag(ref.id)
+            // Double-click a VM to open and run it.
+            .onTapGesture(count: 2) { open(ref) }
             .contextMenu {
+                let running = sessions.controller(for: ref.id) != nil
+                Button(running ? "Show Window" : "Open") { open(ref) }
+                if running {
+                    Button("Shut Down", role: .destructive) { sessions.stopSession(ref.id) }
+                }
+                Divider()
                 if ref.isExternal {
                     Button("Remove from Library") { library.forget(ref) }
                 }
                 Button("Delete…", role: .destructive) { library.delete(ref) }
+                    .disabled(running)
             }
         }
         .navigationTitle("Kapsule")
@@ -70,6 +85,14 @@ struct LibraryView: View {
                     .help("New Virtual Machine")
             }
         }
+    }
+
+    /// Open a VM: start it if stopped, then bring its window forward.
+    private func open(_ ref: VMReference) {
+        if sessions.controller(for: ref.id) == nil {
+            sessions.startSession(for: ref)
+        }
+        openWindow(value: ref.id)
     }
 
     @ViewBuilder private var detail: some View {
