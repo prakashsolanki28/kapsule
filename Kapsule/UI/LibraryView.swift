@@ -10,12 +10,23 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(library.models, selection: $selection) { model in
-                Label(model.name, systemImage: icon(for: model.guest))
-                    .tag(model.id)
-                    .contextMenu {
-                        Button("Delete", role: .destructive) { library.delete(model) }
+            List(library.references, selection: $selection) { ref in
+                HStack {
+                    Label(ref.model.name, systemImage: icon(for: ref.model.guest))
+                    if ref.isExternal {
+                        Spacer()
+                        Image(systemName: "externaldrive")
+                            .foregroundStyle(.secondary)
+                            .help("Stored outside the Kapsule library")
                     }
+                }
+                .tag(ref.id)
+                .contextMenu {
+                    if ref.isExternal {
+                        Button("Remove from Library") { library.forget(ref) }
+                    }
+                    Button("Delete…", role: .destructive) { library.delete(ref) }
+                }
             }
             .navigationTitle("Kapsule")
             .toolbar {
@@ -25,9 +36,9 @@ struct LibraryView: View {
                 }
             }
         } detail: {
-            if let id = selection, let model = library.models.first(where: { $0.id == id }) {
-                VMDetailView(model: model)
-            } else if library.models.isEmpty {
+            if let id = selection, let ref = library.reference(for: id) {
+                VMDetailView(reference: ref)
+            } else if library.references.isEmpty {
                 WelcomeView { library.beginNewVM() }
             } else {
                 ContentUnavailableView(

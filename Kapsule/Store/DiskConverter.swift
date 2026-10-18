@@ -28,8 +28,12 @@ public enum DiskConverter {
 
     /// Formats Kapsule will convert. Anything else is rejected rather than letting
     /// qemu-img auto-probe an attacker-chosen format.
+    ///
+    /// VMDK is intentionally excluded: it is a *descriptor* format that can reference
+    /// extent files in other locations, and safely validating every extent is error-prone.
+    /// Flatten a VMDK first (`qemu-img convert -O qcow2`) and import that instead.
     public static let allowedFormats: Set<String> =
-        ["qcow2", "raw", "vmdk", "vhdx", "vpc", "parallels", "qed", "vdi"]
+        ["qcow2", "raw", "vhdx", "vpc", "parallels", "qed", "vdi"]
 
     public struct Info: Sendable {
         public let format: String      // e.g. "qcow2", "parallels", "vmdk", "raw"
@@ -59,28 +63,51 @@ public enum DiskConverter {
         }
         let vsize = (obj["virtual-size"] as? NSNumber)?.uint64Value ?? 0
 
-        // Reject any image that points at another file on the host.
-        let keys = ["backing-filename", "full-backing-filename", "backing_file",
-                    "data-file", "data_file"]
-        var external = keys.contains { obj[$0] != nil }
-        if let fmtSpecific = obj["format-specific"] as? [String: Any],
-           let data = fmtSpecific["data"] as? [String: Any] {
-            external = external || keys.contains { data[$0] != nil }
-        }
-        // VMDK descriptors can list extents in other files; "children" with >1 file,
-        // or any child whose filename is outside the source directory, is also external.
-        if let children = obj["children"] as? [[String: Any]] {
-            let sourceDir = url.deletingLastPathComponent().standardizedFileURL.path
-            for child in children {
-                if let fn = child["filename"] as? String {
-                    let p = URL(fileURLWithPath: fn).standardizedFileURL.path
-                    if p != url.standardizedFileURL.path, !p.hasPrefix(sourceDir + "/") {
-                        external = true
+        // Reject any image that references another file on the host. We scan the ENTIRE
+        // qemu-img JSON tree for any key that names a file (backing-filename, data-file,
+        // extent filenames, nested children[].info.filename, etc.) and treat any path that
+        // is not the source file itself as external. This fails *closed*: any filename we
+        // can't prove is the source file marks the image external.
+        let selfPath = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let external = Self.referencesForeignFile(obj, selfPath: selfPath)
+        return Info(format: format, virtualSizeBytes: vsize, referencesExternalFile: external)
+    }
+
+    /// Recursively scan a qemu-img JSON object. Returns true if it references any file
+    /// other than `selfPath` — a backing file, data file, or VMDK extent. Any key whose
+    /// name contains "filename" (case-insensitive) is treated as a file reference.
+    static func referencesForeignFile(_ value: Any, selfPath: String) -> Bool {
+        switch value {
+        case let dict as [String: Any]:
+            for (key, v) in dict {
+                let lower = key.lowercased()
+                // Any key that names a referenced file: "*filename*", "backing-file",
+                // "backing_file", "data-file", "data_file", VMDK extent names, etc.
+                let namesAFile = lower.contains("filename")
+                    || lower.contains("backing-file") || lower.contains("backing_file")
+                    || lower.contains("data-file") || lower.contains("data_file")
+                    || lower.hasSuffix("-file") || lower.hasSuffix("_file")
+                if namesAFile {
+                    if let path = v as? String {
+                        let resolved = URL(fileURLWithPath: path)
+                            .resolvingSymlinksInPath().standardizedFileURL.path
+                        if resolved != selfPath { return true }
+                    } else if v is NSNull {
+                        continue
+                    } else {
+                        // A filename field that isn't a plain string we understand →
+                        // fail closed.
+                        return true
                     }
                 }
+                if referencesForeignFile(v, selfPath: selfPath) { return true }
             }
+            return false
+        case let arr as [Any]:
+            return arr.contains { referencesForeignFile($0, selfPath: selfPath) }
+        default:
+            return false
         }
-        return Info(format: format, virtualSizeBytes: vsize, referencesExternalFile: external)
     }
 
     /// Convert `source` to a raw image at `destination`. Progress is reported 0…1.

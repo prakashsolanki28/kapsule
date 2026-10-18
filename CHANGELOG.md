@@ -37,8 +37,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   proprietary format is reverse-engineered, and originals are never modified. Verified by
   importing a real UTM qcow2 VM to a valid raw GPT disk.
 
+- **External VM bookmarks:** VMs stored outside the default library (external drives,
+  custom folders) now appear in the sidebar, marked with an external-drive icon. `VMBookmarks`
+  persists security-scoped bookmarks that survive unmount/remount and reboots; `VMStore`
+  gains `VMReference`, `listReferences()`, and remember/forget. External VMs can be removed
+  from the library without deleting their files.
+
 ### Security
 
+- Hardened disk import against arbitrary host file reads: `DiskConverter` now recursively
+  scans the full `qemu-img info` JSON and rejects any image referencing a foreign file
+  (backing file, `data-file`, VMDK extents, nested `children[].info.filename`), failing
+  **closed** on any filename field it can't prove is the source. VMDK (descriptor-based) is
+  dropped from the allowlist; the input format is pinned with `-f`; non-file source URLs
+  (`json:`/`http:`/`nbd:`) are refused. Covered by tests for backing files, external data
+  files, and the recursive-scan edge cases.
 - Hardened `VMStore` and `VZBackend` against path traversal: VM bundle directories are
   derived from the stable VM `id` (not the display name), `diskImageRelativePath` is
   validated as a single safe file component, resolved paths are asserted to stay inside

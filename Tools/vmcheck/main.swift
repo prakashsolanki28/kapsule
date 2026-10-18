@@ -9,6 +9,17 @@ import KapsuleCore
 
 let args = CommandLine.arguments
 
+// --bookmark <bundle>  : add an external VM bundle to the library's bookmark index.
+if args.count >= 3, args[1] == "--bookmark" {
+    let bundle = URL(fileURLWithPath: args[2])
+    let store = try VMStore()
+    try store.rememberExternal(bundle)
+    let refs = store.listReferences()
+    print("✓ bookmarked \(bundle.lastPathComponent)")
+    print("  library now lists \(refs.count) VM(s): \(refs.map { "\($0.model.name)\($0.isExternal ? " [ext]" : "")" }.joined(separator: ", "))")
+    exit(0)
+}
+
 // --import-plan <bundle>  : detect format + parse config, no conversion.
 if args.count >= 3, args[1] == "--import-plan" {
     let src = URL(fileURLWithPath: args[2])

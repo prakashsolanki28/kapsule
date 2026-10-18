@@ -5,9 +5,12 @@ import SwiftUI
 
 /// Detail pane for a selected VM: summary + the console once running.
 struct VMDetailView: View {
-    let model: VirtualMachineModel
+    let reference: VMReference
     @EnvironmentObject private var library: VMLibraryViewModel
     @StateObject private var controller = VMController()
+
+    private var model: VirtualMachineModel { reference.model }
+    @State private var stopAccess: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,7 +19,14 @@ struct VMDetailView: View {
             console
         }
         .navigationTitle(model.name)
-        .onDisappear { Task { await controller.stopIfRunning() } }
+        .onAppear {
+            // Hold security-scoped access to an external bundle while it's open.
+            if reference.isExternal { stopAccess = VMBookmarks.beginAccess(reference.bundleURL) }
+        }
+        .onDisappear {
+            Task { await controller.stopIfRunning() }
+            stopAccess?(); stopAccess = nil
+        }
     }
 
     private var header: some View {
@@ -77,7 +87,7 @@ struct VMDetailView: View {
     }
 
     private func start() {
-        guard let bundle = library.bundleURL(for: model) else { return }
-        Task { try? await controller.start(model: model, bundleURL: bundle) }
+        // Access to an external bundle is held by onAppear for the view's lifetime.
+        Task { try? await controller.start(model: model, bundleURL: reference.bundleURL) }
     }
 }

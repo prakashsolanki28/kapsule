@@ -51,6 +51,39 @@ final class DiskConverterTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: dest.path))
     }
 
+    func testRejectsImageWithExternalDataFile() throws {
+        let qemu = try requireQemu()
+        let dir = try tmpDir(); defer { try? FileManager.default.removeItem(at: dir) }
+
+        // An external data file (qcow2 "external data file" feature) lives outside any
+        // bundle; the main image is just metadata pointing at it.
+        let dataFile = dir.appendingPathComponent("payload.raw")
+        _ = try run(qemu, ["create", "-f", "raw", dataFile.path, "16M"])
+
+        let evil = dir.appendingPathComponent("meta.qcow2")
+        let rc = try run(qemu, ["create", "-f", "qcow2",
+                                "-o", "data_file=\(dataFile.path),data_file_raw=on",
+                                evil.path, "16M"])
+        try XCTSkipIf(rc != 0, "this qemu build doesn't support external data files")
+
+        let info = try DiskConverter.inspect(evil)
+        XCTAssertTrue(info.referencesExternalFile, "external data file must be detected")
+    }
+
+    func testRecursiveScanFailsClosedOnUnknownFilenameShape() {
+        // A filename key whose value isn't a plain string must be treated as external.
+        let json: [String: Any] = [
+            "format": "qcow2",
+            "format-specific": ["data": ["filename": ["nested": "weird"]]],
+        ]
+        XCTAssertTrue(DiskConverter.referencesForeignFile(json, selfPath: "/x/self.qcow2"))
+    }
+
+    func testRecursiveScanAllowsOwnFilename() {
+        let json: [String: Any] = ["format": "qcow2", "filename": "/x/self.qcow2"]
+        XCTAssertFalse(DiskConverter.referencesForeignFile(json, selfPath: "/x/self.qcow2"))
+    }
+
     func testRejectsImageWithExternalBackingFile() throws {
         let qemu = try requireQemu()
         let dir = try tmpDir(); defer { try? FileManager.default.removeItem(at: dir) }

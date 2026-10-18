@@ -3,6 +3,20 @@
 
 import Foundation
 
+/// A VM and the on-disk bundle it lives in. Carries the real location so external VMs
+/// (on other drives) can be opened without recomputing a default-root path.
+public struct VMReference: Identifiable, Equatable, Sendable {
+    public let model: VirtualMachineModel
+    public let bundleURL: URL
+    public var id: UUID { model.id }
+    public var isExternal: Bool
+    public init(model: VirtualMachineModel, bundleURL: URL, isExternal: Bool) {
+        self.model = model
+        self.bundleURL = bundleURL
+        self.isExternal = isExternal
+    }
+}
+
 /// Discovers, loads, and persists VM bundles on disk.
 ///
 /// A VM is a package directory `<name>.kapsule/` containing `config.json`, `disk.img`,
@@ -13,6 +27,8 @@ public final class VMStore {
 
     /// Root directory holding VM bundles, e.g. ~/Library/Application Support/Kapsule.
     public let root: URL
+    /// Index of VM bundles kept outside `root` (external drives, custom folders).
+    public let bookmarks: VMBookmarks
     private let fm = FileManager.default
 
     public init(root: URL? = nil) throws {
@@ -25,6 +41,7 @@ public final class VMStore {
             self.root = base.appendingPathComponent("Kapsule", isDirectory: true)
         }
         try fm.createDirectory(at: self.root, withIntermediateDirectories: true)
+        self.bookmarks = VMBookmarks(libraryRoot: self.root)
     }
 
     /// Bundle directory URL for a model (does not create it).
@@ -46,13 +63,48 @@ public final class VMStore {
         }
     }
 
-    /// List all VM models found under `root`.
+    /// List all VM models found under `root` (default library only).
     public func listModels() throws -> [VirtualMachineModel] {
-        let entries = (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
-        return entries
-            .filter { $0.pathExtension == Self.bundleExtension }
-            .compactMap { try? loadModel(bundleURL: $0) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        listReferences().filter { !$0.isExternal }.map { $0.model }
+    }
+
+    /// List every VM: those under the default `root` plus bookmarked external bundles.
+    /// Each reference carries the real bundle URL so external VMs open correctly.
+    public func listReferences() -> [VMReference] {
+        var refs: [VMReference] = []
+
+        // Default-library VMs.
+        let local = (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        for url in local where url.pathExtension == Self.bundleExtension {
+            if let model = try? loadModel(bundleURL: url) {
+                refs.append(VMReference(model: model, bundleURL: url, isExternal: false))
+            }
+        }
+
+        // Bookmarked external VMs (security-scoped access while reading config).
+        for url in bookmarks.resolvedBundleURLs() {
+            let stop = VMBookmarks.beginAccess(url)
+            defer { stop() }
+            if let model = try? loadModel(bundleURL: url) {
+                refs.append(VMReference(model: model, bundleURL: url, isExternal: true))
+            }
+        }
+
+        // De-duplicate by id (an external VM also inside root, unlikely) and sort by name.
+        var seen = Set<UUID>()
+        return refs
+            .filter { seen.insert($0.id).inserted }
+            .sorted { $0.model.name.localizedCaseInsensitiveCompare($1.model.name) == .orderedAscending }
+    }
+
+    /// Record an externally-located bundle so it shows in the library next launch.
+    public func rememberExternal(_ bundleURL: URL) throws {
+        try bookmarks.add(bundleURL)
+    }
+
+    /// Forget an external VM (does not delete its files).
+    public func forgetExternal(_ bundleURL: URL) throws {
+        try bookmarks.remove(bundleURL)
     }
 
     public func loadModel(bundleURL: URL) throws -> VirtualMachineModel {
