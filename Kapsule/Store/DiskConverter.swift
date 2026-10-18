@@ -26,35 +26,89 @@ public enum DiskConverter {
         return which("qemu-img")
     }
 
+    /// Formats Kapsule will convert. Anything else is rejected rather than letting
+    /// qemu-img auto-probe an attacker-chosen format.
+    public static let allowedFormats: Set<String> =
+        ["qcow2", "raw", "vmdk", "vhdx", "vpc", "parallels", "qed", "vdi"]
+
     public struct Info: Sendable {
         public let format: String      // e.g. "qcow2", "parallels", "vmdk", "raw"
         public let virtualSizeBytes: UInt64
+        /// A backing or external data file this image references, if any. Its presence
+        /// means the image can pull bytes from another host path — unsafe for untrusted
+        /// input, so such images are refused.
+        public let referencesExternalFile: Bool
     }
 
-    /// Read a disk image's format and virtual size via `qemu-img info --output=json`.
+    /// Read a disk image's format and virtual size via `qemu-img info --output=json`, and
+    /// detect whether it references any external backing/data file.
     public static func inspect(_ url: URL) throws -> Info {
         guard let qemu = qemuImgPath() else { throw ImportError.qemuMissing }
-        let out = try run(qemu, ["info", "--output=json", url.path])
+        // Only accept a concrete local file. qemu-img also accepts protocol/pseudo paths
+        // like `json:{...}`, `http://`, `nbd://`; reject anything that isn't a real file
+        // so a crafted source string can't make qemu read elsewhere.
+        guard url.isFileURL, FileManager.default.fileExists(atPath: url.path) else {
+            throw ImportError.diskNotFound(url.lastPathComponent)
+        }
+        // --force-share is not used; -U avoids locking issues on read-only inspection.
+        let out = try run(qemu, ["info", "-U", "--output=json", url.path])
         guard let data = out.data(using: .utf8),
               let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let format = obj["format"] as? String else {
             throw ImportError.diskUnreadable(url.lastPathComponent)
         }
         let vsize = (obj["virtual-size"] as? NSNumber)?.uint64Value ?? 0
-        return Info(format: format, virtualSizeBytes: vsize)
+
+        // Reject any image that points at another file on the host.
+        let keys = ["backing-filename", "full-backing-filename", "backing_file",
+                    "data-file", "data_file"]
+        var external = keys.contains { obj[$0] != nil }
+        if let fmtSpecific = obj["format-specific"] as? [String: Any],
+           let data = fmtSpecific["data"] as? [String: Any] {
+            external = external || keys.contains { data[$0] != nil }
+        }
+        // VMDK descriptors can list extents in other files; "children" with >1 file,
+        // or any child whose filename is outside the source directory, is also external.
+        if let children = obj["children"] as? [[String: Any]] {
+            let sourceDir = url.deletingLastPathComponent().standardizedFileURL.path
+            for child in children {
+                if let fn = child["filename"] as? String {
+                    let p = URL(fileURLWithPath: fn).standardizedFileURL.path
+                    if p != url.standardizedFileURL.path, !p.hasPrefix(sourceDir + "/") {
+                        external = true
+                    }
+                }
+            }
+        }
+        return Info(format: format, virtualSizeBytes: vsize, referencesExternalFile: external)
     }
 
     /// Convert `source` to a raw image at `destination`. Progress is reported 0…1.
     /// Runs synchronously; call from a background task.
+    ///
+    /// Security: the source is untrusted (users import VM files from anywhere). A crafted
+    /// image can declare a *backing file* or *external data file* pointing at an arbitrary
+    /// host path (e.g. /etc/passwd), which a naive `qemu-img convert` would copy into the
+    /// output. We therefore (1) probe the format, (2) refuse unknown formats and any image
+    /// that references an external file, and (3) pass `-f <format>` explicitly so qemu-img
+    /// cannot be steered into probing a different format than we validated.
     public static func convertToRaw(
         source: URL, destination: URL,
         progress: @escaping @Sendable (Double) -> Void
     ) throws {
         guard let qemu = qemuImgPath() else { throw ImportError.qemuMissing }
-        // -p prints progress; -O raw selects the output format. qemu-img autodetects input.
+        let info = try inspect(source)
+        guard allowedFormats.contains(info.format) else {
+            throw ImportError.conversionFailed("Unsupported or unexpected disk format “\(info.format)”.")
+        }
+        guard !info.referencesExternalFile else {
+            throw ImportError.conversionFailed(
+                "This image references an external file on your Mac, which Kapsule refuses to import for safety. Flatten it first (qemu-img convert) and try again.")
+        }
+        // -f pins the input format we validated; -O raw is the output; -p prints progress.
         try runStreaming(
             qemu,
-            ["convert", "-p", "-O", "raw", source.path, destination.path],
+            ["convert", "-p", "-f", info.format, "-O", "raw", source.path, destination.path],
             onLine: { line in
                 // qemu-img prints like "    (12.34/100%)"
                 if let pct = parsePercent(line) { progress(pct / 100.0) }
