@@ -54,11 +54,40 @@ struct VMWindowView: View {
                 topControlStrip(controller)
             }
             .ignoresSafeArea()
+        } else if let error = sessions.startError {
+            // The VM failed to start — show the reason instead of a window that just
+            // sits there (or flashes shut).
+            failure(error)
         } else if hadSession {
             Color.black.onAppear { dismiss() }
         } else {
             idle
         }
+    }
+
+    private func failure(_ message: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 46)).foregroundStyle(.orange)
+            Text("Couldn’t start the machine").font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+            Text(message)
+                .font(.callout).foregroundStyle(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 440)
+            HStack(spacing: 12) {
+                Button("Try Again") {
+                    sessions.startError = nil
+                    if let ref = sessions.reference(for: vmID) ?? sessions.pendingReference(for: vmID) {
+                        sessions.startSession(for: ref)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                Button("Close") { sessions.startError = nil; dismiss() }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
     }
 
     // MARK: Display (fills the window)

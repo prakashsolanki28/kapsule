@@ -168,6 +168,7 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
                         subject.send(.running)
                         cont.resume()
                     case .failure(let error):
+                        releaseMachine()   // free disk/ISO handles on a failed start
                         subject.send(.error)
                         cont.resume(throwing: VMBackendError.backendFailure(error.localizedDescription))
                     }
@@ -212,9 +213,11 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
                 subject.send(.stopping)
                 vm.stop { [self] error in
                     if let error {
+                        releaseMachine()
                         subject.send(.error)
                         cont.resume(throwing: VMBackendError.backendFailure(error.localizedDescription))
                     } else {
+                        releaseMachine()
                         subject.send(.stopped)
                         cont.resume()
                     }
@@ -231,6 +234,16 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
     }
 
     // MARK: - Helpers
+
+    /// Release the VM and its disk attachments so the backing files are no longer held
+    /// open. Without this, a stopped VM keeps the disk/ISO locked and the next start fails
+    /// with "storage attachment invalid". Must run on `queue` (the VM's queue).
+    private func releaseMachine() {
+        machine?.delegate = nil
+        machine = nil
+        configuration = nil
+        DispatchQueue.main.async { [self] in virtualMachine = nil }
+    }
 
     private func finish(_ result: Result<Void, Error>, running: VMState, cont: CheckedContinuation<Void, Error>) {
         switch result {
@@ -304,9 +317,11 @@ public final class VZBackend: NSObject, VMBackend, @unchecked Sendable {
 
 extension VZBackend: VZVirtualMachineDelegate {
     public func guestDidStop(_ virtualMachine: VZVirtualMachine) {
+        releaseMachine()
         subject.send(.stopped)
     }
     public func virtualMachine(_ vm: VZVirtualMachine, didStopWithError error: Error) {
+        releaseMachine()
         subject.send(.error)
     }
 }
